@@ -94,7 +94,7 @@ def main():
                         metavar='N', help='number of epochs to train')
     args = parser.parse_args()
 
-    os.environ['CUDA_VISIBLE_DEVICES'] = '7'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '6'
     use_cuda = False
     if torch.cuda.is_available():
         use_cuda = True
@@ -107,6 +107,11 @@ def main():
     data_file = open(path_data, 'rb')
     history_u_lists, history_ur_lists, history_v_lists, history_vr_lists, train_u, train_v, train_r, test_u, test_v, test_r, social_adj_lists, ratings_list = pickle.load(
         data_file)
+        
+    num_users = history_u_lists.__len__()
+    num_items = history_v_lists.__len__()
+    num_ratings = ratings_list.__len__()
+
     """
     ## toy dataset 
     history_u_lists, history_ur_lists:  user's purchased history (item set in training set), and his/her rating score (dict)
@@ -129,43 +134,37 @@ def main():
     test_r = torch.FloatTensor(test_r).to(device)
     
 
-    print("building train graph ...")
-    train_uu = utils.build_uu_graph(train_u, social_adj_lists, device)
-    train_uv = utils.build_uv_graph(train_u, history_u_lists, history_ur_lists, device)
-    train_vu = utils.build_uv_graph(train_v, history_v_lists, history_vr_lists, device)
-    
-    print("building test graph ...")
-    test_uu = utils.build_uu_graph(test_u, social_adj_lists, device)
-    test_uv = utils.build_uv_graph(test_u, history_u_lists, history_ur_lists, device)
-    test_vu = utils.build_uv_graph(test_v, history_v_lists, history_vr_lists, device)
-
-    train_data = train_u, train_v, train_uv, train_vu, train_r, train_uu
-    test_data = test_u, test_v, test_uv, test_vu, test_r, test_uu
-
-    num_users = history_u_lists.__len__()
-    num_items = history_v_lists.__len__()
-    num_ratings = ratings_list.__len__()
-
     u2e = nn.Embedding(num_users, embed_dim).to(device)
     v2e = nn.Embedding(num_items, embed_dim).to(device)
     r2e = nn.Embedding(num_ratings, embed_dim).to(device)
 
+    print("building train graph ...")
+    train_uu = utils.build_uu_graph(train_u, social_adj_lists, u2e, device)
+    train_uv = utils.build_uv_graph(train_u, history_u_lists, history_ur_lists, u2e, v2e, r2e, device)
+    train_vu = utils.build_vu_graph(train_v, history_v_lists, history_vr_lists, u2e, v2e, r2e, device)
+    
+    print("building test graph ...")
+    test_uu = utils.build_uu_graph(test_u, social_adj_lists, u2e, device)
+    test_uv = utils.build_uv_graph(test_u, history_u_lists, history_ur_lists, u2e, v2e, r2e, device)
+    test_vu = utils.build_vu_graph(test_v, history_v_lists, history_vr_lists, u2e, v2e, r2e, device)
+
+    train_data = train_u, train_v, train_uv, train_vu, train_r, train_uu
+    test_data = test_u, test_v, test_uv, test_vu, test_r, test_uu
+
     # user feature
     # features: item * rating
-    agg_u_history = UV_Aggregator(
-        v2e, r2e, u2e, embed_dim, cuda=device, uv=True)
+    agg_u_history = UV_Aggregator(embed_dim, cuda=device, uv=True)
     enc_u_history = UV_Encoder(u2e, embed_dim, agg_u_history, cuda=device, uv=True)
     # neighobrs
-    agg_u_social = Social_Aggregator(u2e, embed_dim, cuda=device)
+    agg_u_social = Social_Aggregator(embed_dim, cuda=device)
     enc_u = Social_Encoder(embed_dim, agg_u_social, base_model=enc_u_history, cuda=device)
 
     # item feature: user * rating
-    agg_v_history = UV_Aggregator(
-        v2e, r2e, u2e, embed_dim, cuda=device, uv=False)
+    agg_v_history = UV_Aggregator(embed_dim, cuda=device, uv=False)
     enc_v_history = UV_Encoder(v2e, embed_dim, agg_v_history, cuda=device, uv=False)
 
     # model
-    graphrec = GraphRec(enc_u, enc_v_history, r2e).to(device)
+    graphrec = GraphRec(enc_u, enc_v_history).to(device)
     optimizer = torch.optim.Adam(
         graphrec.parameters(), lr=args.lr, weight_decay=0.02)
     scheduler = StepLR(optimizer, step_size=40, gamma=0.1)

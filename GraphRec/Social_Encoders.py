@@ -18,9 +18,8 @@ class Social_Encoder(nn.Module):
         self.linear = nn.Linear(2 * self.embed_dim, self.embed_dim)  #
 
     def forward(self, nodes, data_uu, data_uv):
-        g, row_idxs, col_idxs = data_uu
-        neigh_feats = self.aggregator.forward(
-            nodes, g, row_idxs, col_idxs)  # user-user network
+        g, emb_u, rep = data_uu
+        neigh_feats = self.aggregator.forward(nodes, g, emb_u, rep)  # user-user network
         self_feats = self.base_model(nodes, data_uv)
         # self-connection could be considered.
         combined = torch.cat([self_feats, neigh_feats], dim=1)

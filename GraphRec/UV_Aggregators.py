@@ -17,12 +17,9 @@ class UV_Aggregator(nn.Module):
     item and user aggregator: for aggregating embeddings of neighbors (item/user aggreagator).
     """
 
-    def __init__(self, v2e, r2e, u2e, embed_dim, cuda, uv=True):
+    def __init__(self, embed_dim, cuda, uv=True):
         super(UV_Aggregator, self).__init__()
         self.uv = uv
-        self.v2e = v2e
-        self.r2e = r2e
-        self.u2e = u2e
         self.device = cuda
         self.embed_dim = embed_dim
         self.att = Attention(self.embed_dim)
@@ -33,25 +30,16 @@ class UV_Aggregator(nn.Module):
             nn.ReLU()
         )
 
-    def forward(self, nodes, uv_g, row_idxs, col_idxs, ratings):
-        if self.uv == True:
-            emb_uv = self.v2e.weight[row_idxs]
-            rep = self.u2e.weight[col_idxs]
-        else:
-            emb_uv = self.u2e.weight[row_idxs]
-            rep = self.v2e.weight[col_idxs]
-        emb_r = self.r2e.weight[ratings]
+    def forward(self, nodes, uv_g, emb_uv, rep, emb_r):
         t_cat = torch.cat((emb_uv, emb_r), 1)
         ohistory = self.mlp(t_cat)
         attention = self.att(ohistory, rep)
-        torch.cuda.synchronize()
-        start = time.time()
         attention = edge_softmax(uv_g, attention)
         uv_g.edata['h'] = ohistory * attention
-        uv_g.update_all(message_func=fn.copy_edge(edge='h', out='m'),
-                        reduce_func=fn.sum(msg='m', out='n'))
-        torch.cuda.synchronize()
-        end = time.time()
-        print("end - start: %d", end - start)
-        feat = uv_g.ndata['n'][nodes]
-        return feat
+        if self.uv == False: #user->item
+            uv_g.multi_update_all({'looks': (fn.copy_e('h', 'm'), fn.sum('m', 'n'))}, "sum")
+            feat = uv_g.nodes['item'].data['n']
+        else: #item->user
+            uv_g.multi_update_all({'looked-by': (fn.copy_e('h', 'm'), fn.sum('m', 'n'))}, "sum")
+            feat = uv_g.nodes['user'].data['n']
+        return feat[nodes]

@@ -8,7 +8,7 @@ import torch
 
 class GraphRec(nn.Module):
 
-    def __init__(self, enc_u, enc_v_history, r2e):
+    def __init__(self, enc_u, enc_v_history):
         super(GraphRec, self).__init__()
         self.enc_u = enc_u
         self.enc_v_history = enc_v_history
@@ -21,7 +21,6 @@ class GraphRec(nn.Module):
         self.w_uv1 = nn.Linear(self.embed_dim * 2, self.embed_dim)
         self.w_uv2 = nn.Linear(self.embed_dim, 16)
         self.w_uv3 = nn.Linear(16, 1)
-        self.r2e = r2e
         self.bn1 = nn.BatchNorm1d(self.embed_dim, momentum=0.5)
         self.bn2 = nn.BatchNorm1d(self.embed_dim, momentum=0.5)
         self.bn3 = nn.BatchNorm1d(self.embed_dim, momentum=0.5)
