@@ -89,6 +89,14 @@ class Data(object):
 
         self.g = dgl.heterograph(data_dict, num_nodes_dict=num_dict)
 
+    def fullbatch(self):
+        users = self.exist_users
+        full_batch = []
+        for u in users:
+            items = self.train_items[u]
+            full_batch = full_batch + items
+        return users, full_batch
+
 
     def sample(self):
         if self.batch_size <= self.n_users:

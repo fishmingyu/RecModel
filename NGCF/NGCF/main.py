@@ -24,9 +24,10 @@ def main(args):
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
     # Step 3: training epoches ============================================================================== #
-    n_batch = data_generator.n_train // args.batch_size + 1
     t0 = time()
     cur_best_pre_0, stopping_step = 0, 0
+    users, pos_items = data_generator.fullbatch()
+    print(pos_items)
     loss_loger, pre_loger, rec_loger, ndcg_loger, hit_loger = [], [], [], [], []
     for epoch in range(args.epoch):
         t1 = time()
@@ -35,47 +36,30 @@ def main(args):
         updateepochtime = 0
         relunormepochtime = 0
         epochforwardtime = 0
-        sampletime = 0
-        print(n_batch)
-        for idx in range(n_batch):
-            torch.cuda.synchronize()
-            start = time()
-            users, pos_items, neg_items = data_generator.sample()
-            torch.cuda.synchronize()
-            end = time()
-            with profile(use_cuda=True,record_shapes=True) as prof:
-                u_g_embeddings, pos_i_g_embeddings, neg_i_g_embeddings, \
-                    messagetime, updatetime, relunormtime, modelcaltime = model(g, 'user', 'item', users,
-                                                                                pos_items,
-                                                                                neg_items)
-                messageepochtime = messageepochtime + messagetime
-                updateepochtime = updateepochtime + updatetime
-                relunormepochtime = relunormepochtime + relunormtime
-                epochforwardtime = epochforwardtime + modelcaltime
-                start2 = time()
-                batch_loss, batch_mf_loss, batch_emb_loss = model.create_bpr_loss(u_g_embeddings,
-                                                                                pos_i_g_embeddings,
-                                                                                neg_i_g_embeddings)
-                optimizer.zero_grad()
-                batch_loss.backward()
-                optimizer.step()
-            f = open('./profile.txt', 'w')
-            print(prof.key_averages().table(sort_by="self_cuda_time_total", row_limit=30),file=f)
-            f.close()
-            loss += batch_loss
-            mf_loss += batch_mf_loss
-            emb_loss += batch_emb_loss
-            back = time()
-            sampletime += end - start
-            print("backward time: %.3f" % (back - start2))
-        print("sample time %d", sampletime)
+
+        with profile(use_cuda=True,record_shapes=True) as prof:
+            u_g_embeddings, pos_i_g_embeddings, \
+            messagetime, updatetime, relunormtime, modelcaltime = model(g, 'user', 'item', users, pos_items)
+            messageepochtime = messageepochtime + messagetime
+            updateepochtime = updateepochtime + updatetime
+            relunormepochtime = relunormepochtime + relunormtime
+            epochforwardtime = epochforwardtime + modelcaltime
+            start2 = time()
+            loss, mf_loss, emb_loss = model.create_bpr_loss(u_g_embeddings, pos_i_g_embeddings)
+            optimizer.zero_grad()
+            batch_loss.backward()
+            optimizer.step()
+        f = open('./profile.txt', 'w')
+        print(prof.key_averages().table(sort_by="self_cuda_time_total", row_limit=30),file=f)
+        f.close()
+        back = time()
+        print("backward time: %.3f" % (back - start2))
         torch.cuda.synchronize()
         if (epoch + 1) % 10 != 0:
             if args.verbose > 0 and epoch % args.verbose == 0:
                 perf_str = 'Epoch %d [%.1fs]: train==[%.5f=%.5f + %.5f]' % (
                     epoch, time() - t1, loss, mf_loss, emb_loss)
                 print(perf_str)
-                print("sampling time %.4f" % (end - start))
                 print("model forward time %.4f in one epoch" % (epochforwardtime))
                 print("model message time %.4f in one epoch" % (messageepochtime))
                 print("model update time %.4f in one epoch" % (updateepochtime))

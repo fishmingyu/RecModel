@@ -99,8 +99,7 @@ class NGCF(nn.Module):
                 srctype, etype, dsttype)).float()  # obtain degrees
             src_degree = g.out_degrees(
                 src, etype=(srctype, etype, dsttype)).float()
-            norm = torch.pow(src_degree * dst_degree, -
-                             0.5).unsqueeze(1)  # compute norm
+            norm = torch.pow(src_degree * dst_degree, -0.5).unsqueeze(1)  # compute norm
             self.norm_dict[(srctype, etype, dsttype)] = norm
 
         self.layers = nn.ModuleList()
@@ -120,15 +119,15 @@ class NGCF(nn.Module):
             ntype: nn.Parameter(self.initializer(torch.empty(g.num_nodes(ntype), in_size))) for ntype in g.ntypes
         })
 
-    def create_bpr_loss(self, users, pos_items, neg_items):
-        pos_scores = (users * pos_items).sum(1)
-        neg_scores = (users * neg_items).sum(1)
+    def create_bpr_loss(self, users, pos_items):
+        pos_scores = torch.matmul(users, pos_items.t()).sum(1)
+        # pos_scores = (users * pos_items).sum(1)
 
-        mf_loss = nn.LogSigmoid()(pos_scores - neg_scores).mean()
+        mf_loss = nn.LogSigmoid()(pos_scores).mean()
         mf_loss = -1 * mf_loss
 
         regularizer = (torch.norm(users) ** 2 + torch.norm(pos_items)
-                       ** 2 + torch.norm(neg_items) ** 2) / 2
+                       ** 2) / 2
         emb_loss = self.lmbd * regularizer / users.shape[0]
 
         return mf_loss + emb_loss, mf_loss, emb_loss
@@ -136,7 +135,7 @@ class NGCF(nn.Module):
     def rating(self, u_g_embeddings, pos_i_g_embeddings):
         return torch.matmul(u_g_embeddings, pos_i_g_embeddings.t())
 
-    def forward(self, g, user_key, item_key, users, pos_items, neg_items):
+    def forward(self, g, user_key, item_key, users, pos_items):
         messaget = 0
         updatet = 0
         relunormt = 0
@@ -147,6 +146,7 @@ class NGCF(nn.Module):
         item_embeds = []
         user_embeds.append(h_dict[user_key])
         item_embeds.append(h_dict[item_key])
+        print(h_dict)
         for layer in self.layers:
             torch.cuda.synchronize()
             start = time.time()
@@ -164,7 +164,6 @@ class NGCF(nn.Module):
 
         u_g_embeddings = user_embd[users, :]
         pos_i_g_embeddings = item_embd[pos_items, :]
-        neg_i_g_embeddings = item_embd[neg_items, :]
 
-        return u_g_embeddings, pos_i_g_embeddings, neg_i_g_embeddings, \
+        return u_g_embeddings, pos_i_g_embeddings, \
             messaget, updatet, relunormt, ngcfcalt
