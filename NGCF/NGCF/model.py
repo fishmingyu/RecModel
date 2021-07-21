@@ -52,11 +52,11 @@ class NGCFLayer(nn.Module):
                 norm = self.norm_dict[(srctype, etype, dsttype)]
                 # feat_dict [n_users, embed_size/layer_size] or [n_users, embed_size/layer_size]
                 # messages [n_train, embed_size/layer_size]
-                torch.cuda.synchronize()
+                
                 start = time.time()
                 messages = norm * (self.W1(feat_dict[srctype][src]) + self.W2(
                     feat_dict[srctype][src]*feat_dict[dsttype][dst]))  # compute messages
-                torch.cuda.synchronize()
+                
                 end = time.time()
                 messagetimeall = messagetimeall + end - start
                 g.edges[(srctype, etype, dsttype)
@@ -66,22 +66,22 @@ class NGCFLayer(nn.Module):
         # print("messagetime : %.4f " % (messagetimeall))
         messagetime = messagetimeall
         # update all, reduce by first type-wisely then across different types
-        torch.cuda.synchronize()
+        
         start = time.time()
         g.multi_update_all(funcs, 'sum') #SPMM
-        torch.cuda.synchronize()
+        
         end = time.time()
         # print("multi_update_all : %.4f " % (end - start))
         updatetime = end - start
         feature_dict = {}
-        torch.cuda.synchronize()
+        
         start = time.time()
         for ntype in g.ntypes:
             h = self.leaky_relu(g.nodes[ntype].data['h'])  # leaky relu
             h = self.dropout(h)  # dropout
             h = F.normalize(h, dim=1, p=2)  # l2 normalize
             feature_dict[ntype] = h
-        torch.cuda.synchronize()
+        
         end = time.time()
         # print("relu&dropout&norm : %.4f " % (end - start))
         relunormtime = end - start
@@ -120,12 +120,10 @@ class NGCF(nn.Module):
         })
 
     def create_bpr_loss(self, users, pos_items):
-        pos_scores = torch.matmul(users, pos_items.t()).sum(1)
+        pos_scores = (users * pos_items).sum(1)
         # pos_scores = (users * pos_items).sum(1)
 
-        mf_loss = nn.LogSigmoid()(pos_scores).mean()
-        mf_loss = -1 * mf_loss
-
+        mf_loss = nn.ReLU()(pos_scores).mean()
         regularizer = (torch.norm(users) ** 2 + torch.norm(pos_items)
                        ** 2) / 2
         emb_loss = self.lmbd * regularizer / users.shape[0]
@@ -144,26 +142,56 @@ class NGCF(nn.Module):
         # obtain features of each layer and concatenate them all
         user_embeds = []
         item_embeds = []
+        
+        g.nodes['item'].data['h'] = h_dict[item_key]
+        g.multi_update_all({'iu': (fn.copy_src('h', 'm'), fn.sum('m', 'h'))}, 'sum') #SPMM
+        item_feat_aggrbyuser = g.nodes['user'].data['h']
         user_embeds.append(h_dict[user_key])
-        item_embeds.append(h_dict[item_key])
-        print(h_dict)
+        item_embeds.append(item_feat_aggrbyuser)
+
         for layer in self.layers:
-            torch.cuda.synchronize()
             start = time.time()
             h_dict, messagetime, updatetime, relunormtime = layer(g, h_dict)
             messaget = messaget + messagetime
             updatet = updatet + updatetime
             relunormt = relunormt + relunormtime
-            torch.cuda.synchronize()
+            
             end = time.time()
             ngcfcalt = ngcfcalt + end - start
+            g.nodes['item'].data['h'] = h_dict[item_key]
+            g.multi_update_all({'iu': (fn.copy_src('h', 'm'), fn.sum('m', 'h'))}, 'sum') #SPMM
+            item_feat_aggrbyuser = g.nodes['user'].data['h']
             user_embeds.append(h_dict[user_key])
-            item_embeds.append(h_dict[item_key])
-        user_embd = torch.cat(user_embeds, 1)
+            # item_embeds.append(h_dict[item_key])
+            item_embeds.append(item_feat_aggrbyuser)
+        user_embd = torch.cat(user_embeds, 1) # cat in second dimension # layer_size_1 + layer_size_2 + ......
         item_embd = torch.cat(item_embeds, 1)
 
-        u_g_embeddings = user_embd[users, :]
-        pos_i_g_embeddings = item_embd[pos_items, :]
 
+        u_g_embeddings = user_embd
+        pos_i_g_embeddings = item_embd
+        
         return u_g_embeddings, pos_i_g_embeddings, \
             messaget, updatet, relunormt, ngcfcalt
+
+    def test(self, g, user_key, item_key, users, pos_items):
+
+        h_dict = {ntype: self.feature_dict[ntype] for ntype in g.ntypes}
+        # obtain features of each layer and concatenate them all
+        user_embeds = []
+        item_embeds = []
+        
+        user_embeds.append(h_dict[user_key])
+        item_embeds.append(h_dict[item_key])
+
+        for layer in self.layers:
+            h_dict, messagetime, updatetime, relunormtime = layer(g, h_dict)
+            user_embeds.append(h_dict[user_key])
+            item_embeds.append(h_dict[item_key])
+        user_embd = torch.cat(user_embeds, 1) # cat in second dimension # layer_size_1 + layer_size_2 + ......
+        item_embd = torch.cat(item_embeds, 1)
+
+        u_g_embeddings = user_embd
+        pos_i_g_embeddings = item_embd
+
+        return u_g_embeddings, pos_i_g_embeddings
