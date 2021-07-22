@@ -4,6 +4,8 @@ import time
 import torch.nn.functional as F
 import torch.autograd.profiler as profiler
 import dgl.function as fn
+import dgl.ops as ops
+from torch.autograd.profiler import profile
 
 
 class NGCFLayer(nn.Module):
@@ -31,7 +33,7 @@ class NGCFLayer(nn.Module):
         # norm
         self.norm_dict = norm_dict
 
-    def forward(self, g, feat_dict):
+    def forward(self, g, multi_g, feat_dict):
 
         messagetime = 0
         updatetime = 0
@@ -41,7 +43,10 @@ class NGCFLayer(nn.Module):
         messagetimeall = 0
         for srctype, etype, dsttype in g.canonical_etypes:  # "tags"
             if srctype == dsttype:  # for self loops
+                start = time.time()
                 messages = self.W1(feat_dict[srctype])
+                end = time.time()
+                messagetimeall = messagetimeall + end - start
                 g.nodes[srctype].data[etype] = messages  # store in ndata
                 funcs[(srctype, etype, dsttype)] = (fn.copy_u(etype, 'm'),
                                                     fn.sum('m', 'h'))  # define message and reduce functions
@@ -53,10 +58,8 @@ class NGCFLayer(nn.Module):
                 # feat_dict [n_users, embed_size/layer_size] or [n_users, embed_size/layer_size]
                 # messages [n_train, embed_size/layer_size]
                 
-                start = time.time()
-                messages = norm * (self.W1(feat_dict[srctype][src]) + self.W2(
-                    feat_dict[srctype][src]*feat_dict[dsttype][dst]))  # compute messages
-                
+                start = time.time()    
+                messages = norm * (self.W1(ops.copy_u(multi_g[etype], feat_dict[srctype])) + self.W2(ops.u_mul_v(multi_g[etype], feat_dict[srctype], feat_dict[dsttype])))  # compute messages
                 end = time.time()
                 messagetimeall = messagetimeall + end - start
                 g.edges[(srctype, etype, dsttype)
@@ -69,7 +72,6 @@ class NGCFLayer(nn.Module):
         
         start = time.time()
         g.multi_update_all(funcs, 'sum') #SPMM
-        
         end = time.time()
         # print("multi_update_all : %.4f " % (end - start))
         updatetime = end - start
@@ -119,8 +121,8 @@ class NGCF(nn.Module):
             ntype: nn.Parameter(self.initializer(torch.empty(g.num_nodes(ntype), in_size))) for ntype in g.ntypes
         })
 
-    def create_bpr_loss(self, users, pos_items):
-        pos_scores = (users * pos_items).sum(1)
+    def create_bpr_loss(self, users, pos_items, user_idx, item_idx):
+        pos_scores = (users[user_idx] * pos_items[item_idx]).sum(1)
         # pos_scores = (users * pos_items).sum(1)
 
         mf_loss = nn.ReLU()(pos_scores).mean()
@@ -133,7 +135,7 @@ class NGCF(nn.Module):
     def rating(self, u_g_embeddings, pos_i_g_embeddings):
         return torch.matmul(u_g_embeddings, pos_i_g_embeddings.t())
 
-    def forward(self, g, user_key, item_key, users, pos_items):
+    def forward(self, g, multi_g, user_key, item_key):
         messaget = 0
         updatet = 0
         relunormt = 0
@@ -142,39 +144,27 @@ class NGCF(nn.Module):
         # obtain features of each layer and concatenate them all
         user_embeds = []
         item_embeds = []
-        
-        g.nodes['item'].data['h'] = h_dict[item_key]
-        g.multi_update_all({'iu': (fn.copy_src('h', 'm'), fn.sum('m', 'h'))}, 'sum') #SPMM
-        item_feat_aggrbyuser = g.nodes['user'].data['h']
+
         user_embeds.append(h_dict[user_key])
-        item_embeds.append(item_feat_aggrbyuser)
+        item_embeds.append(h_dict[item_key])
 
         for layer in self.layers:
             start = time.time()
-            h_dict, messagetime, updatetime, relunormtime = layer(g, h_dict)
+            h_dict, messagetime, updatetime, relunormtime = layer(g, multi_g, h_dict)
             messaget = messaget + messagetime
             updatet = updatet + updatetime
             relunormt = relunormt + relunormtime
             
             end = time.time()
             ngcfcalt = ngcfcalt + end - start
-            g.nodes['item'].data['h'] = h_dict[item_key]
-            g.multi_update_all({'iu': (fn.copy_src('h', 'm'), fn.sum('m', 'h'))}, 'sum') #SPMM
-            item_feat_aggrbyuser = g.nodes['user'].data['h']
             user_embeds.append(h_dict[user_key])
-            # item_embeds.append(h_dict[item_key])
-            item_embeds.append(item_feat_aggrbyuser)
+            item_embeds.append(h_dict[item_key])
         user_embd = torch.cat(user_embeds, 1) # cat in second dimension # layer_size_1 + layer_size_2 + ......
         item_embd = torch.cat(item_embeds, 1)
-
-
-        u_g_embeddings = user_embd
-        pos_i_g_embeddings = item_embd
-        
-        return u_g_embeddings, pos_i_g_embeddings, \
+        return user_embd, item_embd, \
             messaget, updatet, relunormt, ngcfcalt
 
-    def test(self, g, user_key, item_key, users, pos_items):
+    def test(self, g, multi_g, user_key, item_key, users, pos_items):
 
         h_dict = {ntype: self.feature_dict[ntype] for ntype in g.ntypes}
         # obtain features of each layer and concatenate them all
@@ -185,7 +175,7 @@ class NGCF(nn.Module):
         item_embeds.append(h_dict[item_key])
 
         for layer in self.layers:
-            h_dict, messagetime, updatetime, relunormtime = layer(g, h_dict)
+            h_dict, messagetime, updatetime, relunormtime = layer(g, multi_g, h_dict)
             user_embeds.append(h_dict[user_key])
             item_embeds.append(h_dict[item_key])
         user_embd = torch.cat(user_embeds, 1) # cat in second dimension # layer_size_1 + layer_size_2 + ......

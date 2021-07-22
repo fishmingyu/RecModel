@@ -91,11 +91,13 @@ class Data(object):
 
     def fullbatch(self):
         users = self.exist_users
+        users_batch = []
         full_batch = []
         for u in users:
             items = self.train_items[u]
             full_batch = full_batch + items
-        return users, full_batch
+            users_batch = users_batch + [i for i in range(items.__len__())]
+        return users_batch, full_batch
 
 
     def sample(self):

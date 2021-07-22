@@ -30,6 +30,10 @@ def main(args):
     users, pos_items = data_generator.fullbatch()
     loss_loger, pre_loger, rec_loger, ndcg_loger, hit_loger = [], [], [], [], []
     print("start training...")
+    multi_g = {}
+    for etype in g.etypes:
+        g_tmp = g.edge_type_subgraph([etype])
+        multi_g[etype] = g_tmp
     for epoch in range(args.epoch):
         t1 = time()
         loss, mf_loss, emb_loss = 0., 0., 0.
@@ -37,23 +41,23 @@ def main(args):
         updateepochtime = 0
         relunormepochtime = 0
         epochforwardtime = 0
-
         with profile(use_cuda=False,record_shapes=True) as prof:
             u_g_embeddings, pos_i_g_embeddings, \
-            messagetime, updatetime, relunormtime, modelcaltime = model(g, 'user', 'item', users, pos_items)
-            messageepochtime = messageepochtime + messagetime
-            updateepochtime = updateepochtime + updatetime
-            relunormepochtime = relunormepochtime + relunormtime
-            epochforwardtime = epochforwardtime + modelcaltime
-            start2 = time()
+            messagetime, updatetime, relunormtime, modelcaltime = model(g, multi_g, 'user', 'item')
         f = open('./profile.txt', 'w')
-        loss, mf_loss, emb_loss = model.create_bpr_loss(u_g_embeddings, pos_i_g_embeddings)
+                print(prof.key_averages(group_by_input_shape=True).table(sort_by="self_cpu_time_total", row_limit=30),file=f)
+                f.close()
+        messageepochtime = messageepochtime + messagetime
+        updateepochtime = updateepochtime + updatetime
+        relunormepochtime = relunormepochtime + relunormtime
+        epochforwardtime = epochforwardtime + modelcaltime
+        start2 = time()
+        
+        loss, mf_loss, emb_loss = model.create_bpr_loss(u_g_embeddings, pos_i_g_embeddings, users, pos_items)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-        print(prof.key_averages().table(sort_by="self_cpu_time_total", row_limit=30),file=f)
-        f.close()
         back = time()
         print("backward time: %.3f" % (back - start2))
         
@@ -71,7 +75,7 @@ def main(args):
         # evaluate the model every 10 epoches
         t2 = time()
         users_to_test = list(data_generator.test_set.keys())
-        ret = test(model, g, users_to_test)
+        ret = test(model, g, multi_g, users_to_test)
         t3 = time()
         loss_loger.append(loss)
         rec_loger.append(ret['recall'])
