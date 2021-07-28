@@ -89,16 +89,6 @@ class Data(object):
 
         self.g = dgl.heterograph(data_dict, num_nodes_dict=num_dict)
 
-    def fullbatch(self):
-        users = self.exist_users
-        users_batch = []
-        full_batch = []
-        for u in users:
-            items = self.train_items[u]
-            full_batch = full_batch + items
-            users_batch = users_batch + [i for i in range(items.__len__())]
-        return users_batch, full_batch
-
 
     def sample(self):
         if self.batch_size <= self.n_users:
@@ -147,3 +137,7 @@ class Data(object):
         print('n_users=%d, n_items=%d' % (self.n_users, self.n_items))
         print('n_interactions=%d' % (self.n_train + self.n_test))
         print('n_train=%d, n_test=%d, sparsity=%.5f' % (self.n_train, self.n_test, (self.n_train + self.n_test)/(self.n_users * self.n_items)))
+
+    
+
+    

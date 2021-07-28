@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import dgl.function as fn
+import dgl.ops as ops
 
 class NGCFLayer(nn.Module):
     def __init__(self, in_size, out_size, norm_dict, dropout):
@@ -38,9 +39,9 @@ class NGCFLayer(nn.Module):
                 g.nodes[srctype].data[etype] = messages   #store in ndata
                 funcs[(srctype, etype, dsttype)] = (fn.copy_u(etype, 'm'), fn.sum('m', 'h'))  #define message and reduce functions
             else:
-                src, dst = g.edges(etype=(srctype, etype, dsttype))
                 norm = self.norm_dict[(srctype, etype, dsttype)]
-                messages = norm * (self.W1(feat_dict[srctype][src]) + self.W2(feat_dict[srctype][src]*feat_dict[dsttype][dst])) #compute messages
+                messages = norm * (self.W1(ops.copy_u(g.edge_type_subgraph([etype]), feat_dict[srctype])) + \
+                 self.W2(ops.u_mul_v(g.edge_type_subgraph([etype]), feat_dict[srctype], feat_dict[dsttype])))  # compute messages
                 g.edges[(srctype, etype, dsttype)].data[etype] = messages  #store in edata
                 funcs[(srctype, etype, dsttype)] = (fn.copy_e(etype, 'm'), fn.sum('m', 'h'))  #define message and reduce functions
 
@@ -53,9 +54,9 @@ class NGCFLayer(nn.Module):
             feature_dict[ntype] = h
         return feature_dict
 
-class NGCF(nn.Module):
+class NGCF1(nn.Module):
     def __init__(self, g, in_size, layer_size, dropout, lmbd=1e-5):
-        super(NGCF, self).__init__()
+        super(NGCF1, self).__init__()
         self.lmbd = lmbd
         self.norm_dict = dict()
         for srctype, etype, dsttype in g.canonical_etypes:

@@ -82,9 +82,9 @@ def get_performance(user_pos_test, r, auc, Ks):
 
 def test_one_user(x):
     # user u's ratings for user u
-    rating = x[0] #rating_batch
+    rating = x[0]
     #uid
-    u = x[1] #user_batch
+    u = x[1]
     #user u's items in the training set
     try:
         training_items = data_generator.train_items[u]
@@ -105,7 +105,7 @@ def test_one_user(x):
     return get_performance(user_pos_test, r, auc, Ks)
 
 
-def test(model, g, multi_g, users_to_test, batch_test_flag=False):
+def test(model, g, users_to_test, batch_test_flag=False):
     result = {'precision': np.zeros(len(Ks)), 'recall': np.zeros(len(Ks)), 'ndcg': np.zeros(len(Ks)),
               'hit_ratio': np.zeros(len(Ks)), 'auc': 0.}
 
@@ -138,7 +138,7 @@ def test(model, g, multi_g, users_to_test, batch_test_flag=False):
 
                 item_batch = range(i_start, i_end)
 
-                u_g_embeddings, pos_i_g_embeddings = model.test(g, multi_g, 'user', 'item',user_batch, item_batch)
+                u_g_embeddings, pos_i_g_embeddings, _ = model(g, 'user', 'item',user_batch, item_batch, [])
                 i_rate_batch = model.rating(u_g_embeddings, pos_i_g_embeddings).detach().cpu()
 
                 rate_batch[:, i_start: i_end] = i_rate_batch
@@ -149,7 +149,7 @@ def test(model, g, multi_g, users_to_test, batch_test_flag=False):
         else:
             # all-item test
             item_batch = range(ITEM_NUM)
-            u_g_embeddings, pos_i_g_embeddings = model.test(g, multi_g, 'user', 'item',user_batch, item_batch)
+            u_g_embeddings, pos_i_g_embeddings, _ = model(g, 'user', 'item',user_batch, item_batch, [])
             rate_batch = model.rating(u_g_embeddings, pos_i_g_embeddings).detach().cpu()
 
         user_batch_rating_uid = zip(rate_batch.numpy(), user_batch)

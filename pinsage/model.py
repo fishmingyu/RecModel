@@ -123,7 +123,7 @@ def train(dataset, args):
             opt.zero_grad()
             loss.backward()
             opt.step()
-            print(prof.key_averages().table(sort_by="self_cpu_time_total", row_limit=30), file=f)
+            print(prof.key_averages(group_by_input_shape=True).table(sort_by="self_cpu_time_total", row_limit=30), file=f)
             f.close()
         # Evaluate
         model.eval()

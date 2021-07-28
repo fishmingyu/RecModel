@@ -24,7 +24,7 @@ def parse_args():
                         help='Embedding size.')
     parser.add_argument('--layer_size', nargs='?', default='[64,64,64]',
                         help='Output sizes of every layer')
-    parser.add_argument('--batch_size', type=int, default=29858,
+    parser.add_argument('--batch_size', type=int, default=1024,
                         help='Batch size.')
 
     parser.add_argument('--regs', nargs='?', default='[1e-5]',
@@ -32,6 +32,8 @@ def parse_args():
     parser.add_argument('--lr', type=float, default=0.0001,
                         help='Learning rate.')
 
+    parser.add_argument('--model_type', type=int, default=0,
+                        help='0 for original model, 1 for our implementaion 1, 2 for our implementation with optimization')
 
     parser.add_argument('--gpu', type=int, default=0,
                         help='0 for NAIS_prod, 1 for NAIS_concat')

@@ -30,7 +30,7 @@ sh load_gowalla.sh
 Then, in the NGCF folder, run
 
 ```bash
-python main.py --dataset gowalla --regs [1e-5] --embed_size 64 --layer_size [64,64,64] --lr 0.0001 --save_flag 1 --batch_size 1024 --epoch 400 --verbose 1 --mess_dropout [0.1,0.1,0.1] --gpu 0 
+python main.py --dataset gowalla --regs [1e-5] --embed_size 64 --layer_size [64,64,64] --lr 0.0001 --save_flag 1 --batch_size 1024 --epoch 400 --verbose 1 --mess_dropout [0.1,0.1,0.1] --model_type 2
 ```
 
 NOTE: Following the paper's setting, the node dropout is disabled.
