@@ -1,9 +1,6 @@
 import torch
 import torch.optim as optim
 from model import NGCF
-from model_our1 import NGCF1
-from model_our2 import NGCF2
-from model_our3 import NGCF3
 from utility.batch_test import *
 from utility.helper import early_stopping
 from torch.autograd.profiler import profile
@@ -21,14 +18,7 @@ def main(args):
     g=g.to(device)
 
     # Step 2: Create model and training components=========================================================== #
-    if args.model_type == 0:
-        model = NGCF(g, args.embed_size, args.layer_size, args.mess_dropout, args.regs[0]).to(device)
-    elif args.model_type == 1:
-        model = NGCF1(g, args.embed_size, args.layer_size, args.mess_dropout, args.regs[0]).to(device) 
-    elif args.model_type == 2:
-        model = NGCF2(g, args.embed_size, args.layer_size, args.mess_dropout, args.regs[0]).to(device)
-    else:
-        model = NGCF3(g, args.embed_size, args.layer_size, args.mess_dropout, args.regs[0]).to(device)
+    model = NGCF(g, args.embed_size, args.layer_size, args.mess_dropout, args.regs[0], args.model_type).to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
 

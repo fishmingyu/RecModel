@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import dgl.function as fn
 
-class NGCFLayer(nn.Module):
+class NGCFLayer_ori(nn.Module):
     def __init__(self, in_size, out_size, norm_dict, dropout):
-        super(NGCFLayer, self).__init__()
+        super(NGCFLayer_ori, self).__init__()
         self.in_size = in_size
         self.out_size = out_size
 
@@ -29,7 +29,6 @@ class NGCFLayer(nn.Module):
         self.norm_dict = norm_dict
 
     def forward(self, g, feat_dict):
-
         funcs = {} #message and reduce functions dict
         #for each type of edges, compute messages and reduce them all
         for srctype, etype, dsttype in g.canonical_etypes:
@@ -53,8 +52,153 @@ class NGCFLayer(nn.Module):
             feature_dict[ntype] = h
         return feature_dict
 
+class NGCFLayer_our1(nn.Module):
+    def __init__(self, in_size, out_size, norm_dict, dropout):
+        super(NGCFLayer_our1, self).__init__()
+        self.in_size = in_size
+        self.out_size = out_size
+
+        #weights for different types of messages
+        self.W1 = nn.Linear(in_size, out_size, bias = True)
+        self.W2 = nn.Linear(in_size, out_size, bias = True)
+
+        #leaky relu
+        self.leaky_relu = nn.LeakyReLU(0.2)
+
+        #dropout layer
+        self.dropout = nn.Dropout(dropout)
+
+        #initialization
+        torch.nn.init.xavier_uniform_(self.W1.weight)
+        torch.nn.init.constant_(self.W1.bias, 0)
+        torch.nn.init.xavier_uniform_(self.W2.weight)
+        torch.nn.init.constant_(self.W2.bias, 0)
+
+        #norm
+        self.norm_dict = norm_dict
+
+    def forward(self, g, feat_dict):
+        funcs = {} #message and reduce functions dict
+        #for each type of edges, compute messages and reduce them all
+        for srctype, etype, dsttype in g.canonical_etypes:
+            if srctype == dsttype: #for self loops
+                messages = self.W1(feat_dict[srctype])
+                g.nodes[srctype].data[etype] = messages   #store in ndata
+                funcs[(srctype, etype, dsttype)] = (fn.copy_u(etype, 'm'), fn.sum('m', 'h'))  #define message and reduce functions
+            else:
+                norm = self.norm_dict[(srctype, etype, dsttype)]
+                messages = norm * (self.W1(ops.copy_u(g.edge_type_subgraph([etype]), feat_dict[srctype])) + \
+                 self.W2(ops.u_mul_v(g.edge_type_subgraph([etype]), feat_dict[srctype], feat_dict[dsttype])))  # compute messages
+                g.edges[(srctype, etype, dsttype)].data[etype] = messages  #store in edata
+                funcs[(srctype, etype, dsttype)] = (fn.copy_e(etype, 'm'), fn.sum('m', 'h'))  #define message and reduce functions
+
+        g.multi_update_all(funcs, 'sum') #update all, reduce by first type-wisely then across different types
+        feature_dict={}
+        for ntype in g.ntypes:
+            h = self.leaky_relu(g.nodes[ntype].data['h']) #leaky relu
+            h = self.dropout(h) #dropout
+            h = F.normalize(h,dim=1,p=2) #l2 normalize
+            feature_dict[ntype] = h
+        return feature_dict
+
+class NGCFLayer_our2(nn.Module):
+    def __init__(self, in_size, out_size, norm_dict, dropout):
+        super(NGCFLayer_our2, self).__init__()
+        self.in_size = in_size
+        self.out_size = out_size
+
+        #weights for different types of messages
+        self.W1 = nn.Linear(in_size, out_size, bias = True)
+        self.W2 = nn.Linear(in_size, out_size, bias = True)
+
+        #leaky relu
+        self.leaky_relu = nn.LeakyReLU(0.2)
+
+        #dropout layer
+        self.dropout = nn.Dropout(dropout)
+
+        #initialization
+        torch.nn.init.xavier_uniform_(self.W1.weight)
+        torch.nn.init.constant_(self.W1.bias, 0)
+        torch.nn.init.xavier_uniform_(self.W2.weight)
+        torch.nn.init.constant_(self.W2.bias, 0)
+
+        #norm
+        self.norm_dict = norm_dict
+
+    def forward(self, g, feat_dict):
+        funcs = {} #message and reduce functions dict
+        #for each type of edges, compute messages and reduce them all
+        for srctype, etype, dsttype in g.canonical_etypes:
+            if srctype == dsttype: #for self loops
+                messages = self.W1(feat_dict[srctype])
+                g.nodes[srctype].data[etype] = messages   #store in ndata
+                funcs[(srctype, etype, dsttype)] = (fn.copy_u(etype, 'm'), fn.sum('m', 'h'))  #define message and reduce functions
+            else:
+                norm = self.norm_dict[(srctype, etype, dsttype)]
+                messages = norm * (ops.copy_u(g.edge_type_subgraph([etype]), self.W1(feat_dict[srctype])) + \
+                 ops.u_mul_v(g.edge_type_subgraph([etype]), self.W2(feat_dict[srctype]), self.W2(feat_dict[dsttype])))  # compute messages
+                g.edges[(srctype, etype, dsttype)].data[etype] = messages  #store in edata
+                funcs[(srctype, etype, dsttype)] = (fn.copy_e(etype, 'm'), fn.sum('m', 'h'))  #define message and reduce functions
+
+        g.multi_update_all(funcs, 'sum') #update all, reduce by first type-wisely then across different types
+        feature_dict={}
+        for ntype in g.ntypes:
+            h = self.leaky_relu(g.nodes[ntype].data['h']) #leaky relu
+            h = self.dropout(h) #dropout
+            h = F.normalize(h,dim=1,p=2) #l2 normalize
+            feature_dict[ntype] = h
+        return feature_dict
+
+class NGCFLayer_our3(nn.Module):
+    def __init__(self, in_size, out_size, norm_dict, dropout):
+        super(NGCFLayer_our3, self).__init__()
+        self.in_size = in_size
+        self.out_size = out_size
+
+        #weights for different types of messages
+        self.W1 = nn.Linear(in_size, out_size, bias = True)
+        self.W2 = nn.Linear(in_size, out_size, bias = True)
+
+        #leaky relu
+        self.leaky_relu = nn.LeakyReLU(0.2)
+
+        #dropout layer
+        self.dropout = nn.Dropout(dropout)
+
+        #initialization
+        torch.nn.init.xavier_uniform_(self.W1.weight)
+        torch.nn.init.constant_(self.W1.bias, 0)
+        torch.nn.init.xavier_uniform_(self.W2.weight)
+        torch.nn.init.constant_(self.W2.bias, 0)
+
+        #norm
+        self.norm_dict = norm_dict
+
+    def forward(self, g, feat_dict):
+        #for each type of edges, compute messages and reduce them all
+        for ntype in g.ntypes: 
+            if ntype == 'user':
+                norm = self.norm_dict[('item', 'iu', 'user')]
+                g.nodes[ntype].data['h'] = ops.copy_u_sum(g.edge_type_subgraph(['user_self']), self.W1(feat_dict['user'])) + \
+                 ops.copy_e_sum(g.edge_type_subgraph(['iu']), norm * (ops.copy_u(g.edge_type_subgraph(['iu']), self.W1(feat_dict['item'])) + \
+                 ops.u_mul_v(g.edge_type_subgraph(['iu']), self.W2(feat_dict['item']), self.W2(feat_dict['user']))))
+            else: # to item
+                norm = self.norm_dict[('user', 'ui', 'item')]
+                g.nodes[ntype].data['h'] = ops.copy_u_sum(g.edge_type_subgraph(['item_self']), self.W1(feat_dict['item'])) + \
+                 ops.copy_e_sum(g.edge_type_subgraph(['ui']), norm * (ops.copy_u(g.edge_type_subgraph(['ui']), self.W1(feat_dict['user'])) + \
+                 ops.u_mul_v(g.edge_type_subgraph(['ui']), self.W2(feat_dict['user']), self.W2(feat_dict['item']))))
+
+        feature_dict={}
+        for ntype in g.ntypes:
+            h = self.leaky_relu(g.nodes[ntype].data['h']) #leaky relu
+            h = self.dropout(h) #dropout
+            h = F.normalize(h,dim=1,p=2) #l2 normalize
+            feature_dict[ntype] = h
+        return feature_dict
+
 class NGCF(nn.Module):
-    def __init__(self, g, in_size, layer_size, dropout, lmbd=1e-5):
+    def __init__(self, g, in_size, layer_size, dropout, lmbd=1e-5, model_type):
         super(NGCF, self).__init__()
         self.lmbd = lmbd
         self.norm_dict = dict()
@@ -66,6 +210,15 @@ class NGCF(nn.Module):
             self.norm_dict[(srctype, etype, dsttype)] = norm
 
         self.layers = nn.ModuleList()
+        if model_type == 0:
+            NGCFLayer = NGCFLayer_ori
+        elif model_type == 1:
+            NGCFLayer = NGCFLayer_our1
+        elif model_type == 2:
+            NGCFLayer = NGCFLayer_our2
+        else:
+            NGCFLayer = NGCFLayer_our3
+
         self.layers.append(
             NGCFLayer(in_size, layer_size[0], self.norm_dict, dropout[0])
         )
@@ -74,6 +227,7 @@ class NGCF(nn.Module):
             self.layers.append(
                 NGCFLayer(layer_size[i], layer_size[i+1], self.norm_dict, dropout[i+1])
             )
+    
         self.initializer = nn.init.xavier_uniform_
 
         #embeddings for different types of nodes
