@@ -35,6 +35,9 @@ def parse_args():
     parser.add_argument('--model_type', type=int, default=0,
                         help='0 for original model, 1 for our implementaion 1, 2 for our implementation with optimization')
 
+    parser.add_argument('--profile', type=int, default=0,
+                        help='0 for training, 1 for profiling')
+
     parser.add_argument('--gpu', type=int, default=0,
                         help='0 for NAIS_prod, 1 for NAIS_concat')
 

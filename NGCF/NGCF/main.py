@@ -27,33 +27,49 @@ def main(args):
     t0 = time()
     cur_best_pre_0, stopping_step = 0, 0
     loss_loger, pre_loger, rec_loger, ndcg_loger, hit_loger = [], [], [], [], []
+    if args.profile:
+        print("start profiling...")
+        samplet = 0
+        with profile(use_cuda=False,record_shapes=True,profile_memory=True) as prof:
+            for i in range(100):
+                s1 = time()
+                users, pos_items, neg_items = data_generator.sample()
+                s2 = time()
+                samplet += s2 - s1
+                u_g_embeddings, pos_i_g_embeddings, neg_i_g_embeddings = model(g, 'user', 'item', users,
+                                                                            pos_items,
+                                                                            neg_items) 
+        print("sample time:{:.3f} s".format(samplet))
+        f = open('./profile/profile' + str(args.model_type) + '.txt', 'w')
+        print(prof.key_averages(group_by_input_shape=True).table(sort_by="self_cpu_time_total", row_limit=30),file=f)
+        f.close()
+        exit(0)
     print("start training...")
     for epoch in range(args.epoch):
         t1 = time()
         loss, mf_loss, emb_loss = 0., 0., 0.
-        users, pos_items, neg_items = data_generator.sample()
         for idx in range(n_batch):           
+            users, pos_items, neg_items = data_generator.sample()
             if(idx % 10 == 0):
-                print("idx %d in %d batches" % (idx, n_batch))    
-            with profile(use_cuda=False,record_shapes=True) as prof:
+                print("idx %d in %d batches" % (idx, n_batch))  
+            with profile(use_cuda=False,record_shapes=True,profile_memory=True) as prof:                                                                                                           
                 u_g_embeddings, pos_i_g_embeddings, neg_i_g_embeddings = model(g, 'user', 'item', users,
                                                                            pos_items,
                                                                            neg_items)
-            f = open('./profile.txt', 'w')
+                batch_loss, batch_mf_loss, batch_emb_loss = model.create_bpr_loss(u_g_embeddings,
+                                                                            pos_i_g_embeddings,
+                                                                            neg_i_g_embeddings)
+                optimizer.zero_grad()
+                batch_loss.backward()
+                optimizer.step()
+            f = open('./profile/profile' + str(args.model_type) + '.txt', 'w')
             print(prof.key_averages(group_by_input_shape=True).table(sort_by="self_cpu_time_total", row_limit=30),file=f)
             f.close()
-            batch_loss, batch_mf_loss, batch_emb_loss = model.create_bpr_loss(u_g_embeddings,
-                                                                              pos_i_g_embeddings,
-                                                                              neg_i_g_embeddings)
-            optimizer.zero_grad()
-            batch_loss.backward()
-            optimizer.step()
-
+            exit(0)
             loss += batch_loss
             mf_loss += batch_mf_loss
             emb_loss += batch_emb_loss
-            
-
+        
         if (epoch + 1) % 10 != 0:
             if args.verbose > 0 and epoch % args.verbose == 0:
                 perf_str = 'Epoch %d [%.1fs]: train==[%.5f=%.5f + %.5f]' % (

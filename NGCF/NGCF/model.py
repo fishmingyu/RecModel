@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import dgl.function as fn
+import dgl.ops as ops
+from memory_profiler import profile
 
 class NGCFLayer_ori(nn.Module):
     def __init__(self, in_size, out_size, norm_dict, dropout):
@@ -135,9 +137,11 @@ class NGCFLayer_our2(nn.Module):
                 g.nodes[srctype].data[etype] = messages   #store in ndata
                 funcs[(srctype, etype, dsttype)] = (fn.copy_u(etype, 'm'), fn.sum('m', 'h'))  #define message and reduce functions
             else:
+                
                 norm = self.norm_dict[(srctype, etype, dsttype)]
                 messages = norm * (ops.copy_u(g.edge_type_subgraph([etype]), self.W1(feat_dict[srctype])) + \
-                 ops.u_mul_v(g.edge_type_subgraph([etype]), self.W2(feat_dict[srctype]), self.W2(feat_dict[dsttype])))  # compute messages
+                        self.W2(ops.u_mul_v(g.edge_type_subgraph([etype]), feat_dict[srctype], feat_dict[dsttype])))  # compute messages
+                
                 g.edges[(srctype, etype, dsttype)].data[etype] = messages  #store in edata
                 funcs[(srctype, etype, dsttype)] = (fn.copy_e(etype, 'm'), fn.sum('m', 'h'))  #define message and reduce functions
 
@@ -181,13 +185,13 @@ class NGCFLayer_our3(nn.Module):
             if ntype == 'user':
                 norm = self.norm_dict[('item', 'iu', 'user')]
                 g.nodes[ntype].data['h'] = ops.copy_u_sum(g.edge_type_subgraph(['user_self']), self.W1(feat_dict['user'])) + \
-                 ops.copy_e_sum(g.edge_type_subgraph(['iu']), norm * (ops.copy_u(g.edge_type_subgraph(['iu']), self.W1(feat_dict['item'])) + \
-                 ops.u_mul_v(g.edge_type_subgraph(['iu']), self.W2(feat_dict['item']), self.W2(feat_dict['user']))))
+                    ops.u_mul_e_sum(g.edge_type_subgraph(['iu']), self.W1(feat_dict['item']), norm) + \
+                     ops.copy_e_sum(g.edge_type_subgraph(['iu']), norm * self.W2(ops.u_mul_v(g.edge_type_subgraph(['iu']), feat_dict['item'], feat_dict['user'])))
             else: # to item
                 norm = self.norm_dict[('user', 'ui', 'item')]
                 g.nodes[ntype].data['h'] = ops.copy_u_sum(g.edge_type_subgraph(['item_self']), self.W1(feat_dict['item'])) + \
-                 ops.copy_e_sum(g.edge_type_subgraph(['ui']), norm * (ops.copy_u(g.edge_type_subgraph(['ui']), self.W1(feat_dict['user'])) + \
-                 ops.u_mul_v(g.edge_type_subgraph(['ui']), self.W2(feat_dict['user']), self.W2(feat_dict['item']))))
+                    ops.u_mul_e_sum(g.edge_type_subgraph(['ui']), self.W1(feat_dict['user']), norm) + \
+                     ops.copy_e_sum(g.edge_type_subgraph(['ui']), norm * self.W2(ops.u_mul_v(g.edge_type_subgraph(['ui']), feat_dict['user'], feat_dict['item'])))
 
         feature_dict={}
         for ntype in g.ntypes:
@@ -198,7 +202,7 @@ class NGCFLayer_our3(nn.Module):
         return feature_dict
 
 class NGCF(nn.Module):
-    def __init__(self, g, in_size, layer_size, dropout, lmbd=1e-5, model_type):
+    def __init__(self, g, in_size, layer_size, dropout, lmbd=1e-5, model_type=0):
         super(NGCF, self).__init__()
         self.lmbd = lmbd
         self.norm_dict = dict()
@@ -249,7 +253,8 @@ class NGCF(nn.Module):
 
     def rating(self, u_g_embeddings, pos_i_g_embeddings):
         return torch.matmul(u_g_embeddings, pos_i_g_embeddings.t())
-
+    
+    # @profile
     def forward(self, g,user_key, item_key, users, pos_items, neg_items):
         h_dict = {ntype : self.feature_dict[ntype] for ntype in g.ntypes}
         #obtain features of each layer and concatenate them all
