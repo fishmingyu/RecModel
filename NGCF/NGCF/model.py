@@ -201,6 +201,57 @@ class NGCFLayer_our3(nn.Module):
             feature_dict[ntype] = h
         return feature_dict
 
+class NGCFLayer_our4(nn.Module):
+    def __init__(self, in_size, out_size, norm_dict, dropout):
+        super(NGCFLayer_our4, self).__init__()
+        self.in_size = in_size
+        self.out_size = out_size
+
+        #weights for different types of messages
+        self.W1 = nn.Linear(in_size, out_size, bias = True)
+        self.W2 = nn.Linear(in_size, out_size, bias = True)
+
+        #leaky relu
+        self.leaky_relu = nn.LeakyReLU(0.2)
+
+        #dropout layer
+        self.dropout = nn.Dropout(dropout)
+
+        #initialization
+        torch.nn.init.xavier_uniform_(self.W1.weight)
+        torch.nn.init.constant_(self.W1.bias, 0)
+        torch.nn.init.xavier_uniform_(self.W2.weight)
+        torch.nn.init.constant_(self.W2.bias, 0)
+
+        #norm
+        self.norm_dict = norm_dict
+
+    def forward(self, g, feat_dict):
+        #for each type of edges, compute messages and reduce them all
+        for ntype in g.ntypes: 
+            if ntype == 'user':
+                norm = self.norm_dict[('item', 'iu', 'user')]
+                norm_src = self.norm_dict['item']
+                norm_dst = self.norm_dict['user']
+                g.nodes[ntype].data['h'] = self.W1(ops.copy_u_sum(g.edge_type_subgraph(['user_self']), feat_dict['user']) + \
+                    ops.u_mul_e_sum(g.edge_type_subgraph(['iu']), self.W1(feat_dict['item']), norm)) + \
+                     self.W2(ops.copy_e_sum(g.edge_type_subgraph(['iu']), ops.u_mul_v(g.edge_type_subgraph(['iu']), feat_dict['item'] * norm_src, feat_dict['user'] * norm_dst)))
+            else: # to item
+                norm = self.norm_dict[('user', 'ui', 'item')]
+                norm_src = self.norm_dict['user']
+                norm_dst = self.norm_dict['item']
+                g.nodes[ntype].data['h'] = self.W1(ops.copy_u_sum(g.edge_type_subgraph(['item_self']), feat_dict['item']) + \
+                    ops.u_mul_e_sum(g.edge_type_subgraph(['ui']), feat_dict['user'], norm)) + \
+                     self.W2(ops.copy_e_sum(g.edge_type_subgraph(['ui']), ops.u_mul_v(g.edge_type_subgraph(['ui']), feat_dict['user'] * norm_src, feat_dict['item'] * norm_dst)))
+
+        feature_dict={}
+        for ntype in g.ntypes:
+            h = self.leaky_relu(g.nodes[ntype].data['h']) #leaky relu
+            h = self.dropout(h) #dropout
+            h = F.normalize(h,dim=1,p=2) #l2 normalize
+            feature_dict[ntype] = h
+        return feature_dict
+
 class NGCF(nn.Module):
     def __init__(self, g, in_size, layer_size, dropout, lmbd=1e-5, model_type=0):
         super(NGCF, self).__init__()
@@ -208,20 +259,31 @@ class NGCF(nn.Module):
         self.norm_dict = dict()
         for srctype, etype, dsttype in g.canonical_etypes:
             src, dst = g.edges(etype=(srctype, etype, dsttype))
+            
             dst_degree = g.in_degrees(dst, etype=(srctype, etype, dsttype)).float() #obtain degrees
             src_degree = g.out_degrees(src, etype=(srctype, etype, dsttype)).float()
             norm = torch.pow(src_degree * dst_degree, -0.5).unsqueeze(1) #compute norm
             self.norm_dict[(srctype, etype, dsttype)] = norm
+        for ntype in g.ntypes: 
+            nodes = g.nodes(ntype)
+            if ntype == 'user':
+                nodes_degree = g.in_degrees(nodes, etype=('user', 'ui', 'item')).float()
+            else:
+                nodes_degree = g.out_degrees(nodes, etype=('item', 'iu', 'user')).float()
+            norm = torch.pow(nodes_degree, -0.5).unsqueeze(1)
+            self.norm_dict[ntype] = norm
 
         self.layers = nn.ModuleList()
         if model_type == 0:
             NGCFLayer = NGCFLayer_ori
         elif model_type == 1:
-            NGCFLayer = NGCFLayer_our1
+            NGCFLayer = NGCFLayer_our1                                                                                                                                                                                                                                                                                                                                                                                                                                                            
         elif model_type == 2:
             NGCFLayer = NGCFLayer_our2
-        else:
+        elif model_type == 3:
             NGCFLayer = NGCFLayer_our3
+        else:
+            NGCFLayer = NGCFLayer_our4
 
         self.layers.append(
             NGCFLayer(in_size, layer_size[0], self.norm_dict, dropout[0])

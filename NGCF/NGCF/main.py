@@ -52,20 +52,20 @@ def main(args):
             users, pos_items, neg_items = data_generator.sample()
             if(idx % 10 == 0):
                 print("idx %d in %d batches" % (idx, n_batch))  
-            with profile(use_cuda=False,record_shapes=True,profile_memory=True) as prof:                                                                                                           
-                u_g_embeddings, pos_i_g_embeddings, neg_i_g_embeddings = model(g, 'user', 'item', users,
-                                                                           pos_items,
-                                                                           neg_items)
-                batch_loss, batch_mf_loss, batch_emb_loss = model.create_bpr_loss(u_g_embeddings,
-                                                                            pos_i_g_embeddings,
-                                                                            neg_i_g_embeddings)
-                optimizer.zero_grad()
-                batch_loss.backward()
-                optimizer.step()
-            f = open('./profile/profile' + str(args.model_type) + '.txt', 'w')
-            print(prof.key_averages(group_by_input_shape=True).table(sort_by="self_cpu_time_total", row_limit=30),file=f)
-            f.close()
-            exit(0)
+            # with profile(use_cuda=False,record_shapes=True,profile_memory=True) as prof:                                                                                                           
+            u_g_embeddings, pos_i_g_embeddings, neg_i_g_embeddings = model(g, 'user', 'item', users,
+                                                                        pos_items,
+                                                                        neg_items)
+            batch_loss, batch_mf_loss, batch_emb_loss = model.create_bpr_loss(u_g_embeddings,
+                                                                        pos_i_g_embeddings,
+                                                                        neg_i_g_embeddings)
+            optimizer.zero_grad()
+            batch_loss.backward()
+            optimizer.step()
+            # f = open('./profile/profile' + str(args.model_type) + '.txt', 'w')
+            # print(prof.key_averages(group_by_input_shape=True).table(sort_by="self_cpu_time_total", row_limit=30),file=f)
+            # f.close()
+            # exit(0)
             loss += batch_loss
             mf_loss += batch_mf_loss
             emb_loss += batch_emb_loss
