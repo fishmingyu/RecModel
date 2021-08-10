@@ -6,7 +6,9 @@ import dgl.ops as ops
 from memory_profiler import profile
 # from torch.autograd.profiler import profile
 
+
 class NGCFLayer_ori(nn.Module):
+    fp = open("mprof/report0.log", "w")
     def __init__(self, in_size, out_size, norm_dict, dropout):
         super(NGCFLayer_ori, self).__init__()
         self.in_size = in_size
@@ -30,7 +32,7 @@ class NGCFLayer_ori(nn.Module):
 
         #norm
         self.norm_dict = norm_dict
-    @profile
+    @profile(stream = fp)
     def forward(self, g, feat_dict):
         funcs = {} #message and reduce functions dict
         #for each type of edges, compute messages and reduce them all
@@ -56,6 +58,7 @@ class NGCFLayer_ori(nn.Module):
         return feature_dict
 
 class NGCFLayer_our1(nn.Module):
+    fp = open("mprof/report1.log", "w")
     def __init__(self, in_size, out_size, norm_dict, dropout):
         super(NGCFLayer_our1, self).__init__()
         self.in_size = in_size
@@ -79,7 +82,7 @@ class NGCFLayer_our1(nn.Module):
 
         #norm
         self.norm_dict = norm_dict
-    @profile
+    @profile(stream = fp)
     def forward(self, g, feat_dict):
         funcs = {} #message and reduce functions dict
         #for each type of edges, compute messages and reduce them all
@@ -105,6 +108,7 @@ class NGCFLayer_our1(nn.Module):
         return feature_dict
 
 class NGCFLayer_our2(nn.Module):
+    fp = open("mprof/report2.log", "w")
     def __init__(self, in_size, out_size, norm_dict, dropout):
         super(NGCFLayer_our2, self).__init__()
         self.in_size = in_size
@@ -128,7 +132,7 @@ class NGCFLayer_our2(nn.Module):
 
         #norm
         self.norm_dict = norm_dict
-    @profile
+    @profile(stream = fp)
     def forward(self, g, feat_dict):
         funcs = {} #message and reduce functions dict
         #for each type of edges, compute messages and reduce them all
@@ -156,6 +160,7 @@ class NGCFLayer_our2(nn.Module):
         return feature_dict
 
 class NGCFLayer_our3(nn.Module):
+    fp = open("mprof/report3.log", "w")
     def __init__(self, in_size, out_size, norm_dict, dropout):
         super(NGCFLayer_our3, self).__init__()
         self.in_size = in_size
@@ -179,7 +184,7 @@ class NGCFLayer_our3(nn.Module):
 
         #norm
         self.norm_dict = norm_dict
-    @profile
+    @profile(stream = fp)
     def forward(self, g, feat_dict):
         #for each type of edges, compute messages and reduce them all
         for ntype in g.ntypes: 
@@ -203,6 +208,7 @@ class NGCFLayer_our3(nn.Module):
         return feature_dict
 
 class NGCFLayer_our4(nn.Module):
+    fp = open("mprof/report4.log", "w")
     def __init__(self, in_size, out_size, norm_dict, dropout):
         super(NGCFLayer_our4, self).__init__()
         self.in_size = in_size
@@ -226,7 +232,7 @@ class NGCFLayer_our4(nn.Module):
 
         #norm
         self.norm_dict = norm_dict
-    @profile
+    @profile(stream = fp)
     def forward(self, g, feat_dict):
         #for each type of edges, compute messages and reduce them all
         for ntype in g.ntypes: 
@@ -254,6 +260,7 @@ class NGCFLayer_our4(nn.Module):
         return feature_dict
 
 class NGCFLayer_our5(nn.Module):
+    fp = open("mprof/report5.log", "w")
     def __init__(self, in_size, out_size, norm_dict, dropout):
         super(NGCFLayer_our5, self).__init__()
         self.in_size = in_size
@@ -277,7 +284,7 @@ class NGCFLayer_our5(nn.Module):
 
         #norm
         self.norm_dict = norm_dict
-    @profile
+    @profile(stream = fp)
     def forward(self, g, feat_dict):
         norm_iu = self.norm_dict[('item', 'iu', 'user')]
         norm_ui = self.norm_dict[('user', 'ui', 'item')]

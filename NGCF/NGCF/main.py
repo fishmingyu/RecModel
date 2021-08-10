@@ -5,6 +5,7 @@ from utility.batch_test import *
 from utility.helper import early_stopping
 from torch.autograd.profiler import profile
 from time import time
+from tqdm import *
 import os
 
 def main(args):
@@ -32,7 +33,7 @@ def main(args):
         print("start profiling...")
         samplet = 0
         with profile(use_cuda=False,record_shapes=True,profile_memory=True) as prof:
-            for i in range(100):
+            for i in tqdm(range(20)):
                 s1 = time()
                 users, pos_items, neg_items = data_generator.sample()
                 s2 = time()
@@ -41,7 +42,7 @@ def main(args):
                                                                             pos_items,
                                                                             neg_items) 
         print("sample time:{:.3f} s".format(samplet))
-        f = open('./profile/profile' + str(args.model_type) + '.txt', 'w')
+        f = open('./profile/profile' + str(args.dataset) + str(args.model_type) + '.txt', 'w')
         print(prof.key_averages(group_by_input_shape=True).table(sort_by="self_cpu_time_total", row_limit=30),file=f)
         f.close()
         exit(0)
@@ -49,10 +50,9 @@ def main(args):
     for epoch in range(args.epoch):
         t1 = time()
         loss, mf_loss, emb_loss = 0., 0., 0.
-        for idx in range(n_batch):           
-            users, pos_items, neg_items = data_generator.sample()
-            if(idx % 10 == 0):
-                print("idx %d in %d batches" % (idx, n_batch))  
+        print("epoch %d, total n_batch %d" %(epoch, n_batch))
+        for idx in tqdm(range(n_batch)):           
+            users, pos_items, neg_items = data_generator.sample() 
             with profile(use_cuda=False,record_shapes=True,profile_memory=True) as prof:                                                                                                           
                 u_g_embeddings, pos_i_g_embeddings, neg_i_g_embeddings = model(g, 'user', 'item', users,
                                                                             pos_items,
@@ -66,7 +66,6 @@ def main(args):
             f = open('./profile/profile' + str(args.model_type) + '.txt', 'w')
             print(prof.key_averages(group_by_input_shape=True).table(sort_by="self_cpu_time_total", row_limit=30),file=f)
             f.close()
-            exit(0)
             loss += batch_loss
             mf_loss += batch_mf_loss
             emb_loss += batch_emb_loss

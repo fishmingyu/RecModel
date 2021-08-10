@@ -14,7 +14,7 @@ def parse_args():
 
 
     parser.add_argument('--dataset', nargs='?', default='gowalla',
-                        help='Choose a dataset from {gowalla, yelp2018, amazon-book}')
+                        help='Choose a dataset from {gowalla, amazon-book}')
     parser.add_argument('--verbose', type=int, default=1,
                         help='Interval of evaluation.')
     parser.add_argument('--epoch', type=int, default=400,
