@@ -33,7 +33,7 @@ def main(args):
         print("start profiling...")
         samplet = 0
         with profile(use_cuda=False,record_shapes=True,profile_memory=True) as prof:
-            for i in tqdm(range(20)):
+            for i in tqdm(range(50)):
                 s1 = time()
                 users, pos_items, neg_items = data_generator.sample()
                 s2 = time()
