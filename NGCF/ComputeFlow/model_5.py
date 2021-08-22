@@ -43,7 +43,7 @@ with g.subgraph(name='weight') as c:
     c.node('weight2', "W2")
     c.node('weight2_1', "W2")
 
-with g.subgraph(name='weight') as c:
+with g.subgraph(name='bias') as c:
     c.node_attr.update(color='gray', stype='filled', fillcolor='white', shape='polygon')
     c.node('b1', "b1")
     c.node('b1_1', "b1")

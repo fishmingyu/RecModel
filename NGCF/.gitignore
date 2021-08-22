@@ -2,3 +2,5 @@ Data/gowalla
 Data/amazon-book
 NGCF/mprof/
 *.pkl
+*.png
+*.dat
