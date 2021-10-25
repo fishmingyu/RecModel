@@ -375,7 +375,7 @@ class NGCF(nn.Module):
         return torch.matmul(u_g_embeddings, pos_i_g_embeddings.t())
     
     # @profile
-    def forward(self, g,user_key, item_key, users, pos_items, neg_items):
+    def forward(self, g, user_key, item_key, users, pos_items, neg_items):
         h_dict = {ntype : self.feature_dict[ntype] for ntype in g.ntypes}
         #obtain features of each layer and concatenate them all
         user_embeds = []
