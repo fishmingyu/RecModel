@@ -24,15 +24,15 @@ class PinSAGEModel(nn.Module):
         self.scorer = layers.ItemToItemScorer(full_graph, ntype)
 
     def forward(self, pos_graph, neg_graph, blocks):
-        h_item = self.get_repr(blocks)
-        pos_score = self.scorer(pos_graph, h_item)
-        neg_score = self.scorer(neg_graph, h_item)
+        h_item = self.get_repr(blocks) # get the final embedding of targetd nodes (heads+tails+neg_tails)
+        pos_score = self.scorer(pos_graph, h_item) # score on heads->tails
+        neg_score = self.scorer(neg_graph, h_item) # score on heads->neg_tails
         return (neg_score - pos_score + 1).clamp(min=0)
 
     def get_repr(self, blocks):
-        h_item = self.proj(blocks[0].srcdata)
-        h_item_dst = self.proj(blocks[-1].dstdata)
-        return h_item_dst + self.sage(blocks, h_item)
+        h_item = self.proj(blocks[0].srcdata) # project the original feature into the vector with length hidden_dims
+        h_item_dst = self.proj(blocks[-1].dstdata) # project the original feature of output nodes, into the vector with length hidden_dims
+        return h_item_dst + self.sage(blocks, h_item) # confused about this line of code. Why need to add h_item_dst?
 
 
 def train(dataset, args):
@@ -82,14 +82,14 @@ def train(dataset, args):
 
     collator = sampler_module.PinSAGECollator(
         neighbor_sampler, g, item_ntype, textset)
-    dataloader = DataLoader(
-        batch_sampler,
+    dataloader = DataLoader( # for training
+        batch_sampler,                          # training needs pos examples and neg examples. batch_sampler generate them (heads, tails, neg_tails)
         collate_fn=collator.collate_train,
         num_workers=args.num_workers)
-    dataloader_test = DataLoader(
-        torch.arange(g.number_of_nodes(item_ntype)),
+    dataloader_test = DataLoader( # for test
+        torch.arange(g.number_of_nodes(item_ntype)), # Test doesn't need pos / neg examples. Just randomly choosing the item. 
         batch_size=args.batch_size,
-        collate_fn=collator.collate_test,
+        collate_fn=collator.collate_test, # Sample blocks
         num_workers=args.num_workers)
     dataloader_it = iter(dataloader)
     
@@ -102,6 +102,7 @@ def train(dataset, args):
 
     
     # For each batch of head-tail-negative triplets...
+    sample_t = 0
     for epoch_id in range(args.num_epochs):
         model.train()
         
@@ -110,7 +111,8 @@ def train(dataset, args):
             startsp = time.time()
             pos_graph, neg_graph, blocks = next(dataloader_it)
             endsp = time.time()
-            print("sample time %.3f" % (endsp - startsp))
+            sample_t += endsp - startsp
+            # print("sample time %.3f" % (endsp - startsp))
             # Copy to GPU
             for i in range(len(blocks)):
                 blocks[i] = blocks[i].to(device)
@@ -119,7 +121,7 @@ def train(dataset, args):
             # 
             with profile(use_cuda=False,record_shapes=True) as prof:
                 loss = model(pos_graph, neg_graph, blocks).mean()
-            f = open('./profile.txt', 'w')
+            f = open('./profile/bs_3706.txt', 'w')
             opt.zero_grad()
             loss.backward()
             opt.step()
@@ -128,8 +130,7 @@ def train(dataset, args):
         # Evaluate
         model.eval()
         with torch.no_grad():
-            item_batches = torch.arange(g.number_of_nodes(
-                item_ntype)).split(args.batch_size)
+            item_batches = torch.arange(g.number_of_nodes(item_ntype)).split(args.batch_size)
             h_item_batches = []
             for blocks in dataloader_test:
                 for i in range(len(blocks)):
@@ -152,11 +153,11 @@ if __name__ == '__main__':
     parser.add_argument('--num-neighbors', type=int, default=3)
     parser.add_argument('--num-layers', type=int, default=2)
     parser.add_argument('--hidden-dims', type=int, default=16)
-    parser.add_argument('--batch-size', type=int, default=9746)
+    parser.add_argument('--batch-size', type=int, default=32) # 9746 -> full graph. Actually it should be the size of item nodes: 3706 for MovieLens
     # can also be "cuda:0"
-    parser.add_argument('--device', type=str, default='cuda:1')
+    parser.add_argument('--device', type=str, default='cpu') # 'cuda:0'
     parser.add_argument('--num-epochs', type=int, default=1)
-    parser.add_argument('--batches-per-epoch', type=int, default=5)
+    parser.add_argument('--batches-per-epoch', type=int, default=20000) # 5
     parser.add_argument('--num-workers', type=int, default=0)
     parser.add_argument('--lr', type=float, default=3e-5)
     parser.add_argument('-k', type=int, default=10)

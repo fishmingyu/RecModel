@@ -15,3 +15,6 @@ __pycache__
 # ComputeFlow Graph
 *.png
 *.pdf
+
+# vscode file
+.vscode

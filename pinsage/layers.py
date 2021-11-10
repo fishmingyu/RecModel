@@ -135,12 +135,13 @@ class WeightedSAGEConv(nn.Module):
         with g.local_scope():
             g.srcdata['n'] = self.act(self.Q(self.dropout(h_src)))
             g.edata['w'] = weights.float()
-            print(weights.shape)
-            g.update_all(fn.u_mul_e('n', 'w', 'm'), fn.sum('m', 'n'))
-            g.update_all(fn.copy_e('w', 'm'), fn.sum('m', 'ws'))
+            # print(weights.shape)
+            g.update_all(fn.u_mul_e('n', 'w', 'm'), fn.sum('m', 'n')) # now `n` is the weighted sum
+            g.update_all(fn.copy_e('w', 'm'), fn.sum('m', 'ws')) # `ws` is weight sum
             n = g.dstdata['n']
             ws = g.dstdata['ws'].unsqueeze(1).clamp(min=1)
-            z = self.act(self.W(self.dropout(torch.cat([n / ws, h_dst], 1))))
+            z = self.act(self.W(self.dropout(torch.cat([n / ws, h_dst], 1)))) # `n/ws` is weighted mean. Then concat, dropout, Linear and activation
+            # normalize dst node embedding
             z_norm = z.norm(2, 1, keepdim=True)
             z_norm = torch.where(z_norm == 0, torch.tensor(1.).to(z_norm), z_norm)
             z = z / z_norm
@@ -163,8 +164,8 @@ class SAGENet(nn.Module):
 
     def forward(self, blocks, h):
         for layer, block in zip(self.convs, blocks):
-            h_dst = h[:block.number_of_nodes('DST/' + block.ntypes[0])]
-            h = layer(block, (h, h_dst), block.edata['weights'])
+            h_dst = h[:block.number_of_nodes('DST/' + block.ntypes[0])] # equivalent to: h_dst = h[:block.number_of_dst_nodes()]
+            h = layer(block, (h, h_dst), block.edata['weights']) # WeightedSAGEConv forward()
         return h
 
 class ItemToItemScorer(nn.Module):
@@ -172,14 +173,14 @@ class ItemToItemScorer(nn.Module):
         super().__init__()
 
         n_nodes = full_graph.number_of_nodes(ntype)
-        self.bias = nn.Parameter(torch.zeros(n_nodes))
+        self.bias = nn.Parameter(torch.zeros(n_nodes)) # define bias on all the items in the original full graph
 
     def _add_bias(self, edges):
         bias_src = self.bias[edges.src[dgl.NID]]
         bias_dst = self.bias[edges.dst[dgl.NID]]
         return {'s': edges.data['s'] + bias_src + bias_dst}
 
-    def forward(self, item_item_graph, h):
+    def forward(self, item_item_graph, h): # item_item_graph is pos_graph or neg_graph. h is the final embedding for the node (heads+tails+neg_tails)
         """
         item_item_graph : graph consists of edges connecting the pairs
         h : hidden state of every node

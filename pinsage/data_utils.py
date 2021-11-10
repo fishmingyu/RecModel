@@ -52,6 +52,9 @@ def build_train_graph(g, train_indices, utype, itype, etype, etype_rev):
 def build_val_test_matrix(g, val_indices, test_indices, utype, itype, etype):
     n_users = g.number_of_nodes(utype)
     n_items = g.number_of_nodes(itype)
+    print("User Number: ", n_users, "\tItem Number: ", n_items) # 6040 users, 3706 items (movie)
+    
+    # extract src and dst nodes for val and test edges, then form the corresponding matrix in coo format. 
     val_src, val_dst = g.find_edges(val_indices, etype=etype)
     test_src, test_dst = g.find_edges(test_indices, etype=etype)
     val_src = val_src.numpy()
