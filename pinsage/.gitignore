@@ -1,5 +1,7 @@
 ml-1m
 nowplaying_rs_dataset
 datasets_pickle
-profile.txt
+profile
+scripts
+# log
 __pycache__
