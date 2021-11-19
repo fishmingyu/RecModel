@@ -1,3 +1,20 @@
+# Ignore all files without extension
+# Ignore all
+*
+
+# Unignore all with extensions
+!*.*
+
+# Unignore all dirs
+!*/
+
 __pycache__
 *.zip
 *.txt
+
+# ComputeFlow Graph
+*.png
+*.pdf
+
+# vscode file
+.vscode

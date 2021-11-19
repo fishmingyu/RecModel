@@ -116,7 +116,7 @@ if __name__ == '__main__':
     # Train-validation-test split
     # This is a little bit tricky as we want to select the last interaction for test, and the
     # second-to-last interaction for validation.
-    train_indices, val_indices, test_indices = train_test_split_by_time(ratings, 'timestamp', 'user_id')
+    train_indices, val_indices, test_indices = train_test_split_by_time(ratings, 'timestamp', 'user_id') # indices are for the ratings (edges). 
 
     # Build the graph with training interactions only.
     train_g = build_train_graph(g, train_indices, 'user', 'movie', 'watched', 'watched-by')
