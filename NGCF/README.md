@@ -39,6 +39,10 @@ First to get the data, in the Data folder, run
 sh load_gowalla.sh 
 sh load_amazon-book.sh
 ```
+optional
+```
+sh load_amazon-review/load.sh
+```
 
 Then, in the NGCF folder, run
 
