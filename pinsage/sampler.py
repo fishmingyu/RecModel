@@ -51,7 +51,7 @@ class NeighborSampler(object):
     def sample_blocks(self, seeds, heads=None, tails=None, neg_tails=None): # generate blocks for each GNN layer, given seeds (the top layer samples)
         blocks = []
         for sampler in self.samplers:
-            frontier = sampler(seeds) # PinSAGE sampler
+            frontier = sampler(seeds) # PinSAGE sampler: the frontier input nodes and output nodes are both item_ntype nodes. It connects the most commonly visited item nodes with the given input item nodes. 
             if heads is not None: # when training
                 eids = frontier.edge_ids(torch.cat([heads, heads]), torch.cat([tails, neg_tails]), return_uv=True)[2] # eid for pos edges (heads->tails) and neg edges (heads->neg_tails)
                 if len(eids) > 0:
@@ -85,8 +85,8 @@ def assign_simple_node_features(ndata, g, ntype, assign_id=False):
     """
     Copies data to the given block from the corresponding nodes in the original graph.
     """
-    for col in g.nodes[ntype].data.keys():
-        if not assign_id and col == dgl.NID:
+    for col in g.nodes[ntype].data.keys(): # col = feature_name. e.g. 'h'
+        if not assign_id and col == dgl.NID: # skip col=='_ID'
             continue
         induced_nodes = ndata[dgl.NID]
         ndata[col] = g.nodes[ntype].data[col][induced_nodes]
@@ -112,7 +112,8 @@ def assign_textual_node_features(ndata, textset, ntype):
         A torchtext dataset whose number of examples is the same as that
         of nodes in the original graph.
     """
-    node_ids = ndata[dgl.NID].numpy()
+    node_ids = ndata[dgl.NID].numpy() # node_id in the original graph
+    # print("node_ids length: ", len(node_ids))
 
     for field_name, field in textset.fields.items():
         examples = [getattr(textset[i], field_name) for i in node_ids]
@@ -134,7 +135,7 @@ def assign_features_to_blocks(blocks, g, textset, ntype):
     assign_textual_node_features(blocks[-1].dstdata, textset, ntype)
 
 class PinSAGECollator(object):
-    def __init__(self, sampler, g, ntype, textset):
+    def __init__(self, sampler, g, ntype, textset): # ntype = item_ntype
         self.sampler = sampler
         self.ntype = ntype
         self.g = g

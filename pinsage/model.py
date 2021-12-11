@@ -59,12 +59,16 @@ def train(dataset, args):
     fields = {}
     examples = []
     for key, texts in item_texts.items():
-        fields[key] = torchtext.legacy.data.Field(
+        # print('key = ', key, ', texts = ', texts) # key = title; texts = ['Toy Story', 'Jumanji', ...]
+        fields[key] = torchtext.legacy.data.Field( # Field: could represent text stats in the form of Tensor type. 
             include_lengths=True, lower=True, batch_first=True)
+        # print("Field key: ", fields['title']) # 
     for i in range(g.number_of_nodes(item_ntype)):
         example = torchtext.legacy.data.Example.fromlist(
             [item_texts[key][i] for key in item_texts.keys()],
             [(key, fields[key]) for key in item_texts.keys()])
+        # if (i == 0 or i == 1):
+            # print("Example{}: {}\n".format(i, example)) 
         examples.append(example)
     textset = torchtext.legacy.data.Dataset(examples, fields)
     for key, field in fields.items():

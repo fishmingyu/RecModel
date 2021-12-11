@@ -19,23 +19,24 @@ def _init_input_modules(g, ntype, textset, hidden_dims):
     # * If ``x`` is a field of a textset, we process it as bag of words.
     module_dict = nn.ModuleDict()
 
-    for column, data in g.nodes[ntype].data.items():
+    for column, data in g.nodes[ntype].data.items(): # column: key; data: value
+        # print("column: {}, data: {}, shape: {}".format(column, data, data.shape)) # column = {year, genre, id}
         if column == dgl.NID:
             continue
-        if data.dtype == torch.float32:
+        if data.dtype == torch.float32: # float one-dimensional feature
             assert data.ndim == 2
             m = nn.Linear(data.shape[1], hidden_dims)
             nn.init.xavier_uniform_(m.weight)
             nn.init.constant_(m.bias, 0)
             module_dict[column] = m
-        elif data.dtype == torch.int64:
+        elif data.dtype == torch.int64: # scalar integral feature
             assert data.ndim == 1
-            m = nn.Embedding(
+            m = nn.Embedding( # a lookup table with random initial weights. Shape = [data.max() + 2, hidden_dims]
                 data.max() + 2, hidden_dims, padding_idx=-1)
             nn.init.xavier_uniform_(m.weight)
             module_dict[column] = m
 
-    if textset is not None:
+    if textset is not None: # field of textset
         for column, field in textset.fields.items():
             if field.vocab.vectors:
                 module_dict[column] = BagOfWordsPretrained(field, hidden_dims)
@@ -92,12 +93,14 @@ class LinearProjector(nn.Module):
     def forward(self, ndata):
         projections = []
         for feature, data in ndata.items():
+            # print("feature: {}".format(feature)) # _ID, year, genre, id, title, title_len
             if feature == dgl.NID or feature.endswith('__len'):
                 # This is an additional feature indicating the length of the ``feature``
                 # column; we shouldn't process this.
                 continue
 
             module = self.inputs[feature]
+            # print("Feature: {}; Module: {}".format(feature, module))
             if isinstance(module, (BagOfWords, BagOfWordsPretrained)):
                 # Textual feature; find the length and pass it to the textual module.
                 length = ndata[feature + '__len']
