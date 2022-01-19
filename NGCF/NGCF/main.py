@@ -35,7 +35,7 @@ def main(args):
         with profile(use_cuda=False,record_shapes=True,profile_memory=True) as prof:
             for i in tqdm(range(50)):
                 s1 = time()
-                users, pos_items, neg_items = data_generator.sample()
+                users, pos_items, neg_items = data_generator.sample() # user item pair, user neg_item pair
                 s2 = time()
                 samplet += s2 - s1
                 u_g_embeddings, pos_i_g_embeddings, neg_i_g_embeddings = model(g, 'user', 'item', users,
@@ -51,7 +51,7 @@ def main(args):
         t1 = time()
         loss, mf_loss, emb_loss = 0., 0., 0.
         print("epoch %d, total n_batch %d" %(epoch, n_batch))
-        for idx in tqdm(range(n_batch)):           
+        for idx in tqdm(range(n_batch)):
             users, pos_items, neg_items = data_generator.sample() 
             with profile(use_cuda=False,record_shapes=True,profile_memory=True) as prof:                                                                                                           
                 u_g_embeddings, pos_i_g_embeddings, neg_i_g_embeddings = model(g, 'user', 'item', users,

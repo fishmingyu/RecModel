@@ -87,7 +87,7 @@ class Data(object):
             'user': self.n_users, 'item': self.n_items
         }
 
-        self.g = dgl.heterograph(data_dict, num_nodes_dict=num_dict)
+        self.g = dgl.heterograph(data_dict, num_nodes_dict=num_dict) # g only training file
 
 
     def sample(self):
@@ -138,6 +138,4 @@ class Data(object):
         print('n_interactions=%d' % (self.n_train + self.n_test))
         print('n_train=%d, n_test=%d, sparsity=%.5f' % (self.n_train, self.n_test, (self.n_train + self.n_test)/(self.n_users * self.n_items)))
 
-    
 
-    

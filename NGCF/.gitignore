@@ -1,5 +1,6 @@
 Data/gowalla
 Data/amazon-book
+Data/load_amazon
 NGCF/mprof/
 *.pkl
 *.png

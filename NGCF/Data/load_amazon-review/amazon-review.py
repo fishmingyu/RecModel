@@ -5,7 +5,7 @@ UserItemDict = dict()
 # f1 = open('graph.txt', 'w')
 
 # f1.write("%%MatrixMarket matrix coordinate integer general")
-file_path = "/work/shared/common/project_build/gnn-optane/data/all_csv_files.csv"
+file_path = "all_csv_files.csv"
 with open(file_path) as f:
     reader = csv.reader(f)
     users = 0
