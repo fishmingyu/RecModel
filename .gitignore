@@ -12,6 +12,7 @@ __pycache__
 *.zip
 *.txt
 *.csv
+*.mtx
 
 # ComputeFlow Graph
 *.png
