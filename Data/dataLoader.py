@@ -1,16 +1,20 @@
 from audioop import ulaw2lin
 from re import L
+from turtle import down
 import pandas as pd
 import numpy as np
 import random as rd
 import torch
 import dgl
+import sys
+import os
+from gen import graphExpansion
 
 def to_etype_name(rating):
     return str(rating).replace('.', '_')
 
 class DataLoader(object):
-    def __init__(self, file_path, new_file, output_path, batch_size, test_frac, valid_frac, model_type):
+    def __init__(self, file_path, new_file, batch_size, test_frac, valid_frac, model_type, fractal_expansion, down_factor=200, output_path = 'output.csv'):
         """
         initiate the dataloader and process raw data to a hetero graph
         file_path: the path of input file
@@ -26,6 +30,8 @@ class DataLoader(object):
         self.colname = ['user', 'item', 'rating', 'timestamp']
         self.model_type = model_type
         self.batch_size = batch_size
+        self.fractal_expansion = fractal_expansion
+        self.down_factor = down_factor
         self.process()
 
     def readFile(self):
@@ -53,13 +59,8 @@ class DataLoader(object):
             self.rating_flag = True
         return ui_list
 
-    def train_test_split(self, ui_list):
-        """
-        Shuffle csv data and split it to test and train
-        """
+    def mapping_reorder(self, ui_list):
         self.pairs = len(ui_list)
-        shuffled_idx = np.random.permutation(self.pairs) 
-        self.num_test = round(self.test_frac * len(ui_list))
         
         # print(all_train_list['user'].values)
         _, idx_u = np.unique(ui_list['user'].values, return_index = True)
@@ -68,11 +69,29 @@ class DataLoader(object):
         self.users_reorder = ui_list['user'].values[np.sort(idx_u)]
         self.items_reorder = ui_list['item'].values[np.sort(idx_i)]
 
-        self.n_users = len(self.users_reorder)
-        self.n_items = len(self.items_reorder)
+        n_users = len(self.users_reorder)
+        n_items = len(self.items_reorder)
 
-        self.users_map = dict(zip(self.users_reorder, range(self.n_users))) # key relabel, new label
-        self.items_map = dict(zip(self.items_reorder, range(self.n_items)))
+        self.users_map = dict(zip(self.users_reorder, range(n_users))) # key relabel, new label
+        self.items_map = dict(zip(self.items_reorder, range(n_items)))
+
+        ui_list['user'] = ui_list['user'].map(self.users_map)
+        ui_list['item'] = ui_list['item'].map(self.items_map)
+        if self.new_file:
+            ui_list.to_csv(self.output_path, index=None)
+        
+        return ui_list
+
+    def train_test_split(self, ui_list):
+        """
+        Shuffle csv data and split it to test and train
+        """
+        self.pairs = len(ui_list)
+        shuffled_idx = np.random.permutation(self.pairs) 
+        self.num_test = round(self.test_frac * len(ui_list))
+        
+        self.n_users = len(np.unique(ui_list['user'].values))
+        self.n_items = len(np.unique(ui_list['item'].values))
 
         all_train_list = ui_list.iloc[shuffled_idx]
 
@@ -84,29 +103,9 @@ class DataLoader(object):
         else:
             self.valid_list = tmp_train_list.iloc[: self.num_valid]
             self.train_list = tmp_train_list.iloc[self.num_valid: ]
+        self.n_train = len(self.train_list)
+        self.n_test = len(self.test_list)
         # self.possible_ratings = np.unique(self["rating"].values)
-        if self.new_file:
-            ui_list['user'] = ui_list['user'].map(self.users_map)
-            ui_list['item'] = ui_list['item'].map(self.items_map)
-            ui_list.to_csv(self.output_path, index=None)
-
-
-    def ui_pair(self, list_info):
-        """
-        pack the user item pairs with ratings
-        """
-        rating_row = []
-        rating_col = []
-        for i in range(len(list_info)):
-            user = list_info["user"].values[i]
-            item = list_info["item"].values[i]
-            rating_row.append(self.users_map[user])
-            rating_col.append(self.items_map[item])
-        
-        rating_pairs = (np.array(rating_row).astype(np.int64), np.array(rating_col).astype(np.int64))
-        if self.rating_flag:
-            rating_values = list_info["rating"].values.astype(np.float32)
-            return rating_pairs, rating_values
 
     def gen_enc_graph(self, rating_pairs):
         """
@@ -127,10 +126,11 @@ class DataLoader(object):
         graph = dgl.heterograph(data_dict, num_nodes_dict=num_nodes_dict)
         return graph
 
-    def gen_graph(self, rating_pairs):
+    def gen_train_graph(self, train_list):
         """
         generate heterograph"""
-        users, items = rating_pairs
+        users = train_list['user'].values
+        items = train_list['item'].values
         data_dict = {
                 ('user', 'ui', 'item') : (users, items),
                 ('item', 'iu', 'user') : (items, users)
@@ -140,7 +140,7 @@ class DataLoader(object):
         }
 
         self.g = dgl.heterograph(data_dict, num_nodes_dict=num_dict)
-
+        return users, items
     
     def get_batch(self):
         """
@@ -188,21 +188,30 @@ class DataLoader(object):
 
         return users_with_item, pos_items, neg_items
 
+    def get_num_users_items(self):
+        return self.n_users, self.n_items
+
+    #TODO test_set need every user at least have one item
+    def build_set(self, train_list, test_list):
+        self.train_items, self.test_set = {}, {}
+        
     def process(self):
         """
         processing the dataset
         """
         ui_list = self.readFile()
-        self.train_test_split(ui_list)
-        if self.rating_flag:
-            rating_pairs, rating_values = self.ui_pair(self.train_list)
-        else:
-            rating_pairs = self.ui_pair(self.train_list)
-        self.gen_graph(rating_pairs)
+        mapping_list = self.mapping_reorder(ui_list)
+        if self.fractal_expansion:
+            dg = graphExpansion(mapping_list, self.down_factor)
+            mapping_list = dg.process()
+        self.train_test_split(mapping_list)
+        rating_pairs = self.gen_train_graph(self.train_list)
         self.train_pairs = rating_pairs
+        
         print(self.g)
 
-if __name__ == '__main__':
-    batch_size = 32
-    A = DataLoader(file_path="Data/ratings_Books.csv", new_file=True, output_path = "Data/output.csv", batch_size=batch_size, test_frac = 0.1, valid_frac = 0.1, model_type = 'NGCF')
-    users, pos_items, neg_items = A.get_batch()
+# if __name__ == '__main__':
+#     batch_size = 32
+#     A = DataLoader(file_path="test.csv", new_file=False, 
+#     batch_size=batch_size, test_frac = 0.1, valid_frac = 0.1, model_type = 'NGCF', fractal_expansion = True, down_factor=2, output_path = "output.csv")
+#     users, pos_items, neg_items = A.get_batch()

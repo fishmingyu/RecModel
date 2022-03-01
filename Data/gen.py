@@ -5,73 +5,84 @@ from scipy.io import mmwrite
 from scipy.linalg import sqrtm
 from skimage import transform
 import pandas as pd
-from scipy.sparse import csr_matrix
+from scipy.sparse import coo_matrix
 import numpy as np
 import sys
 
-def initial(path, downfactor):
-    """
-    initialize the sparse matrix
-    input: path of mtx sparse file
-    downfactor: down sampling factor
-    """
-    df = pd.read_csv(path)
-    row = df['user'].values
-    col = df['item'].values
-    rate = df['rating'].values
+class graphExpansion(object):
+    def __init__(self, nodes_pair, downfactor) -> None:
+        """
+        initialize the sparse matrix
+        input: path of mtx sparse file
+        downfactor: down sampling factor
+        """
+        self.nodes_pair = nodes_pair
+        self.downfactor = downfactor
+        self.row = nodes_pair['user'].values
+        self.col = nodes_pair['item'].values
+        self.rate = np.random.randn(len(self.row))
 
-    m = max(row) + 1 # row
-    n = max(col) + 1 # col
+        self.m = max(self.row) + 1 # row
+        self.n = max(self.col) + 1 # col
+        self.nnz = len(self.row) # nnz
+        
+        self.spmat = coo_matrix((self.rate, (self.row, self.col)), shape=(self.m, self.n))
 
-    sparsecsr = csr_matrix((rate, (row, col)), shape=(m, n))
+        self.m_down = round(self.m/downfactor)
+        self.n_down = round(self.n/downfactor)
+        
+        print(f'Read sparse matrix row: {self.m}, col: {self.n}, nnz: {self.nnz}')
+        self.k = min(self.m_down, self.n_down)
+        print(f'down factor is {downfactor}')
 
-    shape = sparsecsr.shape
-    m_ = round(m/downfactor)
-    n_ = round(n/downfactor)
-    nnz = sparsecsr.nnz
-    print(f'Read sparse matrix row: {m}, col: {n}, nnz: {nnz}')
-    k = min(m_, n_)
-    print(f'down factor is {downfactor}')
-    return sparsecsr, k, m_, n_
+    def image_resize(self, mat, m, n):
+        """
+        use skimage to resize the matrix
+        """
+        return transform.resize(mat, (m, n))
 
-def image_resize(mat, m, n):
-    """
-    use skimage to resize the matrix
-    """
-    return transform.resize(mat, (m, n))
+    def compute_reduce(self, sparse, k, m, n):
+        """
+        compute the svd of sparse matrix
+        then apply the frobenius norm
+        """
+        print("start svd...")
+        u, s, v = svds(sparse, k)
+        print("image resizing...")
+        u_ = np.array(self.image_resize(u, n, k))
+        v_ = np.array(self.image_resize(v, k, m))
+        u_t = u_.transpose()
+        v_t = v_.transpose()
+        norm_u = u_ @ sqrtm(u_t @ u_)
+        norm_v = sqrtm(v_ @ v_t)  @ v_
 
-def compute_reduce(sparse, k, m, n):
-    """
-    compute the svd of sparse matrix
-    then apply the frobenius norm
-    """
-    print("start svd...")
-    u, s, v = svds(sparse, k)
-    print("image resizing...")
-    u_ = np.array(image_resize(u, k, n))
-    v_ = np.array(image_resize(v, m, k))
-    u_t = u_.transpose()
-    v_t = v_.transpose()
-    norm_u = u_ @ sqrtm(u_t @ u_)
-    norm_v = sqrtm(v_ @ v_t)  @ v_
-    r_tmp = norm_u @ np.diag(s) @ norm_v
+        r_tmp = norm_u @ np.diag(s) @ norm_v
 
-    M = np.max(np.max(r_tmp))
-    m = np.min(np.min(r_tmp))
-    reduced = r_tmp / (M-m)
-    return reduced
+        M = np.max(np.max(r_tmp))
+        m = np.min(np.min(r_tmp))
+        reduced = r_tmp / (M-m)
+        return reduced
 
-def fractal_expansion(spmat, reduced):
-    """
-    use kronecker product
-    """
-    return sparse.kron(spmat, reduced)
+    def process(self):
+        """
+        output a csr_matrix in scipy
+        """
+        if self.downfactor == 1:
+            out = self.fractal_expansion(self.spmat, self.spmat)
+        else:
+            reduced = self.compute_reduce(self.spmat, self.k, self.m_down, self.n_down)
+            out = self.fractal_expansion(self.spmat, reduced)
+        out = out.tocoo()
+        row = out.row
+        col = out.col
+        
+        data_dict = {'user':row, 'item':col}
 
-if __name__ == '__main__':
-    sparsepath = sys.argv[1] # output.csv
-    downfactor = int(sys.argv[2])
-    spmat, k, m_, n_ = initial(sparsepath, downfactor)
-    reduced = compute_reduce(spmat, k, m_, n_)
-    out = fractal_expansion(spmat, reduced)
-    print("start writing")
-    mmwrite('out.mtx', out)
+        return pd.DataFrame(data_dict)
+
+    def fractal_expansion(self, spmat, reduced):
+        """
+        use kronecker product
+        """
+        return sparse.kron(spmat, reduced)
+

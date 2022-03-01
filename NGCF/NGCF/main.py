@@ -8,6 +8,10 @@ from time import time
 from tqdm import *
 import os
 
+import sys
+sys.path.append(os.path.abspath("../../Data"))
+from dataLoader import DataLoader
+
 def main(args):
     # Step 1: Prepare graph data and device ================================================================= #
     if args.gpu >= 0 and torch.cuda.is_available():
@@ -16,7 +20,10 @@ def main(args):
         device = 'cpu'
         torch.set_num_threads(50)
 
-    g=data_generator.g
+    data_loader = DataLoader(file_path="../../Data/test.csv", new_file=False, 
+    batch_size=args.batch_size, test_frac = 0.1, valid_frac = 0.1, 
+    model_type = 'NGCF', fractal_expansion = True, down_factor=2)
+    g=data_loader.g
     g=g.to(device)
 
     # Step 2: Create model and training components=========================================================== #
@@ -25,7 +32,8 @@ def main(args):
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
     # Step 3: training epoches ============================================================================== #
-    n_batch = data_generator.n_train // args.batch_size + 1
+    # n_batch = data_generator.n_train // args.batch_size + 1
+    n_batch = data_loader.n_train // args.batch_size + 1
     t0 = time()
     cur_best_pre_0, stopping_step = 0, 0
     loss_loger, pre_loger, rec_loger, ndcg_loger, hit_loger = [], [], [], [], []
@@ -35,14 +43,15 @@ def main(args):
         with profile(use_cuda=False,record_shapes=True,profile_memory=True) as prof:
             for i in tqdm(range(50)):
                 s1 = time()
-                users, pos_items, neg_items = data_generator.sample() # user item pair, user neg_item pair
+                # users, pos_items, neg_items = data_generator.sample() # user item pair, user neg_item pair
+                users, pos_items, neg_items = data_loader.get_batch()
                 s2 = time()
                 samplet += s2 - s1
                 u_g_embeddings, pos_i_g_embeddings, neg_i_g_embeddings = model(g, 'user', 'item', users,
                                                                             pos_items,
                                                                             neg_items) 
         print("sample time:{:.3f} s".format(samplet))
-        f = open('./profile/profile' + str(args.dataset) + str(args.model_type) + '.txt', 'w')
+        f = open('./profile/profile/' + str(args.dataset) + str(args.model_type) + '.txt', 'w')
         print(prof.key_averages(group_by_input_shape=True).table(sort_by="self_cpu_time_total", row_limit=30),file=f)
         f.close()
         exit(0)
