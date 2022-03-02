@@ -132,6 +132,8 @@ class DataLoader(object):
         users = train_list['user'].values
         items = train_list['item'].values
         data_dict = {
+                ('user', 'user_self', 'user') : (users, users),
+                ('item', 'item_self', 'item') : (items, items),
                 ('user', 'ui', 'item') : (users, items),
                 ('item', 'iu', 'user') : (items, users)
                 }

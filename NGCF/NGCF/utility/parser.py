@@ -32,7 +32,7 @@ def parse_args():
     parser.add_argument('--lr', type=float, default=0.0001,
                         help='Learning rate.')
 
-    parser.add_argument('--model_type', type=int, default=0,
+    parser.add_argument('--model_type', type=int, default=3,
                         help='0 for original model, 1 for our implementaion 1, 2 for our implementation with optimization')
 
     parser.add_argument('--profile', type=int, default=0,

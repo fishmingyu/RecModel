@@ -61,7 +61,7 @@ def main(args):
         loss, mf_loss, emb_loss = 0., 0., 0.
         print("epoch %d, total n_batch %d" %(epoch, n_batch))
         for idx in tqdm(range(n_batch)):
-            users, pos_items, neg_items = data_generator.sample() 
+            users, pos_items, neg_items = data_loader.get_batch() 
             with profile(use_cuda=False,record_shapes=True,profile_memory=True) as prof:                                                                                                           
                 u_g_embeddings, pos_i_g_embeddings, neg_i_g_embeddings = model(g, 'user', 'item', users,
                                                                             pos_items,
