@@ -5,7 +5,6 @@ g = graphviz.Digraph('NGCF_model5', format='png', node_attr={'shape': 'record'},
 g.attr(rankdir='TD')
 with g.subgraph(name='SpMM') as c:
     c.node_attr.update(color='gray', style='filled', fillcolor='aquamarine', shape='Mrecord')
-    c.node('spmm1', nohtml(r"copy_u\n| {<in> in| graph |<out> out}  | {one tensor | u\-\>i |\[nnz, d\]}"))
     c.node('spmm2', nohtml(r"copy_e_sum\n| {<in> in | graph | <out> out} | {one tensor | u\-\>i | \[M, d\]}"))
     # c.node('spmm3', nohtml(r"copy_e_sum\n| {<in> in | graph | <out> out} | {one tensor | i\-\>u | \[N, d\]}"))
     # c.node('spmm4', nohtml(r"copy_u\n| {<in> in| graph | <out> out} | {one tensor | i\-\>u | \[nnz, d\]}"))
@@ -16,6 +15,8 @@ with g.subgraph(name='SpMM') as c:
 with g.subgraph(name='SDDMM') as c:
     c.node_attr.update(color='white', style='filled', fillcolor='darkturquoise', shape='Mrecord')
     c.node('sddmm1', nohtml(r"u_mul_v\n| {<in> in | graph | <out> out} | {two tensors | u\-i | \[nnz, d\]}"))
+    c.node('sddmm2', nohtml(r"copy_u\n| {<in> in| graph |<out> out}  | {one tensor | u\-\>i |\[nnz, d\]}"))
+
     # c.node('sddmm2', nohtml(r"u_mul_v\n| {<in> in | graph | <out> out} | {two tensors | i\-u | \[nnz, d\]}"))
 
 
@@ -78,9 +79,9 @@ with g.subgraph(name='in') as c:
 
 g.edge('i_e_1', 'Linear5:in')
 # g.edge('i_e', 'Linear6:in')
-g.edge('Linear5:out', 'spmm1:in')
+g.edge('Linear5:out', 'sddmm2:in')
 # g.edge('Linear6:out', 'spmm4:in')
-g.edge('spmm1:out', 'add3')
+g.edge('sddmm2:out', 'add3')
 # g.edge('spmm4:out', 'add4')
 
 g.edge('Linear2:out', 'add3')
